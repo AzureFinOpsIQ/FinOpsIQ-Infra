@@ -1,4 +1,4 @@
----
+﻿---
 name: "Bootstrap Terraform Backend"
 
 on:
@@ -30,16 +30,98 @@ concurrency:
   group: terraform-backend-bootstrap
   cancel-in-progress: false
 
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
 jobs:
-  bootstrap-backend:
-    name: Reusable Bootstrap Backend
-    uses: AzureFinOpsIQ/FinOPsIQ-Workflows/.github/workflows/terraform-bootstrap-backend.yml@main
-    with:
-      location: ${{ inputs.location }}
-      resource_group_name: ${{ inputs.resource_group_name }}
-      storage_account_prefix: ${{ inputs.storage_account_prefix }}
-      container_name: ${{ inputs.container_name }}
-    secrets:
-      azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
-      azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
-      azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  bootstrap:
+    name: "Create Terraform Remote Backend"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform init
+        working-directory: bootstrap
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        working-directory: bootstrap
+        run: terraform validate
+
+      - name: Terraform plan backend bootstrap
+        working-directory: bootstrap
+        run: |
+          terraform plan \
+            -input=false \
+            -out=bootstrap.tfplan \
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -var="location=${{ inputs.location }}" \
+            -var="resource_group_name=${{ inputs.resource_group_name }}" \
+            -var="storage_account_prefix=${{ inputs.storage_account_prefix }}" \
+            -var="container_name=${{ inputs.container_name }}"
+
+      - name: Terraform apply backend bootstrap
+        working-directory: bootstrap
+        run: terraform apply -auto-approve bootstrap.tfplan
+
+      - name: Display Terraform outputs
+        working-directory: bootstrap
+        run: |
+          terraform output
+          terraform output -json > bootstrap-outputs.json
+          {
+            echo "### Terraform Backend Bootstrap Outputs"
+            echo ""
+            echo "| Output | Value |"
+            echo "|---|---|"
+            echo "| Resource Group | $(terraform output -raw resource_group_name) |"
+            echo "| Storage Account | $(terraform output -raw storage_account_name) |"
+            echo "| Container | $(terraform output -raw container_name) |"
+            echo "| DEV State Key | $(terraform output -raw dev_state_key) |"
+            echo "| PROD State Key | $(terraform output -raw prod_state_key) |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload bootstrap outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-backend-bootstrap-outputs
+          path: bootstrap/bootstrap-outputs.json
+          retention-days: 30
+
+      - name: Backend configuration for main pipeline
+        working-directory: bootstrap
+        run: |
+          {
+            echo ""
+            echo "## Copy these values into GitHub Repository Variables"
+            echo ""
+            echo "| Variable | Value |"
+            echo "|----------|-------|"
+            echo "| TF_STATE_RESOURCE_GROUP | $(terraform output -raw resource_group_name) |"
+            echo "| TF_STATE_STORAGE_ACCOUNT | $(terraform output -raw storage_account_name) |"
+            echo "| TF_STATE_CONTAINER | $(terraform output -raw container_name) |"
+            echo ""
+            echo "Create these Repository Variables manually:"
+            echo "- TF_STATE_RESOURCE_GROUP"
+            echo "- TF_STATE_STORAGE_ACCOUNT"
+            echo "- TF_STATE_CONTAINER"
+          } >> "${GITHUB_STEP_SUMMARY}"

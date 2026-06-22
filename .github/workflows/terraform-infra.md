@@ -6,14 +6,6 @@ Workflow:
 .github/workflows/terraform-infra.yml
 ```
 
-This repository workflow is a thin caller. The implementation is centralized in:
-
-```text
-AzureFinOpsIQ/FinOPsIQ-Workflows/.github/workflows/terraform-infra-dev.yml@main
-```
-
-Secrets are passed explicitly by name. The caller does not use `secrets: inherit`.
-
 Scope:
 
 - DEV only
