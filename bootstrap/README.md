@@ -120,6 +120,26 @@ DEV Azure subscription
 
 For stricter production setups, replace broad subscription permissions with narrower resource-group-scoped permissions after the backend and base resource groups exist.
 
+After the backend storage account is created, verify that the GitHub app registration's service principal has:
+
+```text
+Storage Blob Data Contributor
+```
+
+on either:
+
+```text
+Storage Account: <TF_STATE_STORAGE_ACCOUNT>
+```
+
+or:
+
+```text
+Blob Container: <TF_STATE_CONTAINER>
+```
+
+The main Terraform pipeline cannot initialize the remote backend without this data-plane permission because it must list/read/write blobs and acquire blob leases for state locking.
+
 ### 4. Add GitHub repository secrets
 
 In GitHub:
@@ -234,6 +254,45 @@ To add them:
    ```
 
 The main Terraform pipeline consumes these variables during backend initialization.
+
+## Troubleshooting backend initialization
+
+If the main Terraform pipeline fails during `terraform init` with:
+
+```text
+AuthorizationPermissionMismatch
+This request is not authorized to perform this operation using this permission
+```
+
+the GitHub OIDC service principal is missing Storage Blob data-plane access to the Terraform state backend.
+
+Fix:
+
+1. Open the Azure portal.
+2. Go to the backend storage account printed by the bootstrap workflow.
+3. Open **Access control (IAM)**.
+4. Assign:
+
+   ```text
+   Storage Blob Data Contributor
+   ```
+
+5. Principal:
+
+   ```text
+   github-finopsiq-infra-dev
+   ```
+
+6. Scope:
+
+   ```text
+   This storage account
+   ```
+
+7. Wait a few minutes for RBAC propagation.
+8. Rerun the Terraform infrastructure workflow.
+
+`Contributor` is not enough for Blob state access. It allows Azure Resource Manager operations, but it does not grant Blob data-plane permissions.
 
 ## Main Terraform backend consumption
 
