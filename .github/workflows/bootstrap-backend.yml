@@ -1,0 +1,144 @@
+---
+name: "Bootstrap Terraform Backend"
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: "Azure region for backend resources"
+        required: true
+        default: "eastus2"
+      resource_group_name:
+        description: "Resource group for Terraform state backend"
+        required: true
+        default: "rg-finopsiq-tfstate"
+      storage_account_prefix:
+        description: "Storage account prefix; random suffix will be appended"
+        required: true
+        default: "stfinopsiqtfstate"
+      container_name:
+        description: "Blob container name for Terraform state"
+        required: true
+        default: "tfstate"
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: terraform-backend-bootstrap
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  bootstrap:
+    name: "Create Terraform Remote Backend"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform init
+        working-directory: bootstrap
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        working-directory: bootstrap
+        run: terraform validate
+
+      - name: Terraform plan backend bootstrap
+        working-directory: bootstrap
+        run: |
+          terraform plan \
+            -input=false \
+            -out=bootstrap.tfplan \
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -var="location=${{ inputs.location }}" \
+            -var="resource_group_name=${{ inputs.resource_group_name }}" \
+            -var="storage_account_prefix=${{ inputs.storage_account_prefix }}" \
+            -var="container_name=${{ inputs.container_name }}"
+
+      - name: Terraform apply backend bootstrap
+        working-directory: bootstrap
+        run: terraform apply -auto-approve bootstrap.tfplan
+
+      - name: Display Terraform outputs
+        working-directory: bootstrap
+        run: |
+          terraform output
+          terraform output -json > bootstrap-outputs.json
+          {
+            echo "### Terraform Backend Bootstrap Outputs"
+            echo ""
+            echo "| Output | Value |"
+            echo "|---|---|"
+            echo "| Resource Group | $(terraform output -raw resource_group_name) |"
+            echo "| Storage Account | $(terraform output -raw storage_account_name) |"
+            echo "| Container | $(terraform output -raw container_name) |"
+            echo "| DEV State Key | $(terraform output -raw dev_state_key) |"
+            echo "| PROD State Key | $(terraform output -raw prod_state_key) |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload bootstrap outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-backend-bootstrap-outputs
+          path: bootstrap/bootstrap-outputs.json
+          retention-days: 30
+
+      - name: Create or update GitHub repository variables
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          resource_group_name="$(terraform -chdir=bootstrap output -raw resource_group_name)"
+          storage_account_name="$(terraform -chdir=bootstrap output -raw storage_account_name)"
+          container_name="$(terraform -chdir=bootstrap output -raw container_name)"
+
+          gh variable set TF_STATE_RESOURCE_GROUP --body "${resource_group_name}"
+          gh variable set TF_STATE_STORAGE_ACCOUNT --body "${storage_account_name}"
+          gh variable set TF_STATE_CONTAINER --body "${container_name}"
+
+      - name: Verify GitHub repository variables
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh variable get TF_STATE_RESOURCE_GROUP >/dev/null
+          gh variable get TF_STATE_STORAGE_ACCOUNT >/dev/null
+          gh variable get TF_STATE_CONTAINER >/dev/null
+
+          echo "Confirmed repository variables were created or updated:"
+          echo "- TF_STATE_RESOURCE_GROUP"
+          echo "- TF_STATE_STORAGE_ACCOUNT"
+          echo "- TF_STATE_CONTAINER"
+
+          {
+            echo ""
+            echo "### GitHub Repository Variables"
+            echo ""
+            echo "Confirmed these variables were created or updated for the main Terraform pipeline:"
+            echo ""
+            echo "- TF_STATE_RESOURCE_GROUP"
+            echo "- TF_STATE_STORAGE_ACCOUNT"
+            echo "- TF_STATE_CONTAINER"
+          } >> "${GITHUB_STEP_SUMMARY}"
