@@ -17,7 +17,7 @@ network = {
   subnets = {
     aks = {
       name              = "snet-aks"
-      address_prefixes  = ["10.40.0.0/22"]
+      address_prefixes  = ["10.40.1.0/24"]
       service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
     }
   }
