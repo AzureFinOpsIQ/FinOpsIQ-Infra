@@ -39,6 +39,7 @@ env:
   TF_STATE_RESOURCE_GROUP: ${{ vars.TF_STATE_RESOURCE_GROUP }}
   TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
   TF_STATE_CONTAINER: ${{ vars.TF_STATE_CONTAINER }}
+  TF_LOCK_TIMEOUT: 15m
 
 jobs:
   security_scan:
@@ -150,7 +151,7 @@ jobs:
 
       - name: Terraform plan
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform plan -input=false -out=dev.tfplan
+        run: terraform plan -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" -out=dev.tfplan
 
       - name: Generate Terraform plan summary
         id: plan_summary
@@ -291,7 +292,7 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           START_TIME=$(date +%s)
-          terraform apply -auto-approve dev.tfplan
+          terraform apply -auto-approve -lock-timeout="${TF_LOCK_TIMEOUT}" dev.tfplan
           END_TIME=$(date +%s)
           echo "deployment_duration_seconds=$((END_TIME - START_TIME))" >> "${GITHUB_OUTPUT}"
 
@@ -390,7 +391,7 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           set +e
-          terraform plan -detailed-exitcode -input=false -no-color -out=drift.tfplan > drift-plan.txt 2>&1
+          terraform plan -detailed-exitcode -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" -no-color -out=drift.tfplan > drift-plan.txt 2>&1
           EXIT_CODE=$?
           set -e
 

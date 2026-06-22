@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TF_WORKING_DIR="${TF_WORKING_DIR:-environments/dev}"
 TF_DIR="${REPO_ROOT}/${TF_WORKING_DIR}"
 TFVARS_FILE="${TFVARS_FILE:-terraform.tfvars}"
+TF_LOCK_TIMEOUT="${TF_LOCK_TIMEOUT:-15m}"
 
 if ! command -v az >/dev/null 2>&1; then
   echo "Azure CLI is required for import discovery." >&2
@@ -36,7 +37,7 @@ import_if_arm_exists() {
 
   if az resource show --ids "${resource_id}" >/dev/null 2>&1; then
     echo "IMPORT: ${address}"
-    terraform -chdir="${TF_DIR}" import -input=false "${address}" "${resource_id}"
+    terraform -chdir="${TF_DIR}" import -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" "${address}" "${resource_id}"
   else
     echo "MISSING: ${address}"
   fi
@@ -55,7 +56,7 @@ import_if_group_exists() {
 
   if az group show --name "${resource_group_name}" >/dev/null 2>&1; then
     echo "IMPORT: ${address}"
-    terraform -chdir="${TF_DIR}" import -input=false "${address}" "${resource_id}"
+    terraform -chdir="${TF_DIR}" import -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" "${address}" "${resource_id}"
   else
     echo "MISSING: ${address}"
   fi
@@ -77,7 +78,7 @@ import_if_storage_container_exists() {
     --name "${container_name}" \
     --auth-mode login >/dev/null 2>&1; then
     echo "IMPORT: ${address}"
-    terraform -chdir="${TF_DIR}" import -input=false "${address}" "${import_id}"
+    terraform -chdir="${TF_DIR}" import -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" "${address}" "${import_id}"
   else
     echo "MISSING: ${address}"
   fi
