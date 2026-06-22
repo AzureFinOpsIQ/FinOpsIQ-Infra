@@ -49,22 +49,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run tfsec
-        run: |
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}:/src" \
-            aquasec/tfsec:v1.28.14 \
-            /src \
-            --minimum-severity HIGH \
-            --format json \
-            --out /src/tfsec-report.json
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          output_format: cli,sarif
+          output_file_path: console,checkov-report.sarif
+          soft_fail: false
+          quiet: true
+          check: CKV*
+          hard_fail_on: HIGH,CRITICAL
 
-      - name: Upload tfsec report
+      - name: Upload Checkov report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tfsec-dev-report
-          path: tfsec-report.json
+          name: checkov-dev-report
+          path: checkov-report.sarif
           if-no-files-found: warn
           retention-days: 14
 
