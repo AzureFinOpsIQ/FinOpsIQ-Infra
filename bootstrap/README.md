@@ -4,6 +4,14 @@ This isolated bootstrap stack creates the Azure Storage backend used by the main
 
 It is intended to be run once.
 
+The runnable bootstrap workflow in this repository is a thin caller. The implementation is centralized in:
+
+```text
+AzureFinOpsIQ/FinOPsIQ-Workflows/.github/workflows/terraform-bootstrap-backend.yml@main
+```
+
+Secrets are passed explicitly by name. The caller does not use `secrets: inherit`.
+
 It creates:
 
 - Azure Resource Group
