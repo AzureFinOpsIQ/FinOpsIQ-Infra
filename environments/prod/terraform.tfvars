@@ -17,7 +17,7 @@ network = {
   subnets = {
     aks = {
       name              = "snet-aks"
-      address_prefixes  = ["10.50.1.0/24"]
+      address_prefixes  = ["10.50.0.0/22"]
       service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
     }
   }
@@ -154,7 +154,7 @@ aks = {
     enable_auto_scaling = true
     min_count           = 1
     max_count           = 5
-    max_pods            = 250
+    max_pods            = 50
     os_disk_size_gb     = 64
   }
   user_node_pools = {
@@ -165,7 +165,7 @@ aks = {
       enable_auto_scaling = true
       min_count           = 1
       max_count           = 5
-      max_pods            = 250
+      max_pods            = 50
       os_disk_size_gb     = 128
     }
   }

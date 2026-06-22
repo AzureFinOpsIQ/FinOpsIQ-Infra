@@ -184,8 +184,7 @@ module "aks" {
 }
 
 module "workload_identity" {
-  source              = "../../modules/workload-identity"
-  resource_group_name = module.resource_group.name
+  source = "../../modules/workload-identity"
   federated_credentials = {
     for key, subject in local.workload_identity_subjects :
     key => {
