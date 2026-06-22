@@ -5,7 +5,7 @@ resource "azurerm_cosmosdb_account" "this" {
   offer_type                    = "Standard"
   kind                          = "GlobalDocumentDB"
   public_network_access_enabled = var.public_network_access_enabled
-  local_authentication_disabled = var.local_authentication_disabled
+  local_authentication_enabled  = !var.local_authentication_disabled
   free_tier_enabled             = var.free_tier_enabled
   tags                          = var.tags
 

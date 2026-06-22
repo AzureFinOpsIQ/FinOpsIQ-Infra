@@ -41,14 +41,15 @@ variable "aks_subnet_id" {
 variable "system_node_pool" {
   description = "System node pool configuration."
   type = object({
-    name                = string
-    vm_size             = string
-    node_count          = number
-    enable_auto_scaling = bool
-    min_count           = number
-    max_count           = number
-    max_pods            = number
-    os_disk_size_gb     = number
+    name                        = string
+    vm_size                     = string
+    node_count                  = number
+    enable_auto_scaling         = bool
+    min_count                   = number
+    max_count                   = number
+    max_pods                    = number
+    os_disk_size_gb             = number
+    temporary_name_for_rotation = optional(string, "sysrot")
   })
 }
 

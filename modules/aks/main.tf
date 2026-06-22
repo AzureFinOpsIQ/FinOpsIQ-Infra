@@ -19,6 +19,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     max_pods                     = var.system_node_pool.max_pods
     os_disk_size_gb              = var.system_node_pool.os_disk_size_gb
     only_critical_addons_enabled = true
+    temporary_name_for_rotation  = var.system_node_pool.temporary_name_for_rotation
   }
 
   identity {
