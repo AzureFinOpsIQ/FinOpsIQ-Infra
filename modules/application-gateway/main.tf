@@ -8,12 +8,35 @@ resource "azurerm_public_ip" "this" {
   tags                = var.tags
 }
 
+resource "azurerm_web_application_firewall_policy" "this" {
+  name                = var.waf_policy_name
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = var.tags
+
+  policy_settings {
+    enabled                     = var.waf_enabled
+    mode                        = var.waf_firewall_mode
+    request_body_check          = true
+    file_upload_limit_in_mb     = 100
+    max_request_body_size_in_kb = 128
+  }
+
+  managed_rules {
+    managed_rule_set {
+      type    = var.waf_rule_set_type
+      version = var.waf_rule_set_version
+    }
+  }
+}
+
 resource "azurerm_application_gateway" "this" {
   name                = var.name
   resource_group_name = var.resource_group_name
   location            = var.location
   zones               = length(var.zones) == 0 ? null : var.zones
   http2_enabled       = true
+  firewall_policy_id  = azurerm_web_application_firewall_policy.this.id
   tags                = var.tags
 
   sku {
@@ -69,10 +92,4 @@ resource "azurerm_application_gateway" "this" {
     priority                   = 100
   }
 
-  waf_configuration {
-    enabled          = var.waf_enabled
-    firewall_mode    = var.waf_firewall_mode
-    rule_set_type    = var.waf_rule_set_type
-    rule_set_version = var.waf_rule_set_version
-  }
 }

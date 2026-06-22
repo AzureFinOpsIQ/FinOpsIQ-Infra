@@ -22,3 +22,13 @@ output "public_ip_fqdn" {
   description = "Application Gateway public IP FQDN."
   value       = azurerm_public_ip.this.fqdn
 }
+
+output "waf_policy_id" {
+  description = "Application Gateway WAF policy resource ID."
+  value       = azurerm_web_application_firewall_policy.this.id
+}
+
+output "waf_policy_name" {
+  description = "Application Gateway WAF policy name."
+  value       = azurerm_web_application_firewall_policy.this.name
+}

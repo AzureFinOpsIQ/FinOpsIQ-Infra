@@ -52,6 +52,7 @@ acr = {
 application_gateway = {
   name                   = "agw-finopsiq-prod"
   public_ip_name         = "pip-agw-finopsiq-prod"
+  waf_policy_name        = "waf-finopsiq-prod"
   subnet_key             = "app_gateway"
   sku_name               = "WAF_v2"
   sku_tier               = "WAF_v2"

@@ -92,6 +92,7 @@ variable "application_gateway" {
   type = object({
     name                   = string
     public_ip_name         = string
+    waf_policy_name        = string
     subnet_key             = string
     sku_name               = string
     sku_tier               = string

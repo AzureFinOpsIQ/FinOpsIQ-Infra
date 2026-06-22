@@ -8,6 +8,11 @@ variable "public_ip_name" {
   type        = string
 }
 
+variable "waf_policy_name" {
+  description = "Web Application Firewall policy name."
+  type        = string
+}
+
 variable "resource_group_name" {
   description = "Resource group name."
   type        = string

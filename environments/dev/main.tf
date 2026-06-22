@@ -82,6 +82,7 @@ module "application_gateway" {
   source                 = "../../modules/application-gateway"
   name                   = var.application_gateway.name
   public_ip_name         = var.application_gateway.public_ip_name
+  waf_policy_name        = var.application_gateway.waf_policy_name
   resource_group_name    = module.resource_group.name
   location               = module.resource_group.location
   subnet_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.application_gateway.subnet_key].name}"
@@ -309,6 +310,7 @@ output "helm_values" {
     application_gateway_id         = module.application_gateway.id
     application_gateway_name       = module.application_gateway.name
     application_gateway_public_ip  = module.application_gateway.public_ip_address
+    application_gateway_waf_policy = module.application_gateway.waf_policy_name
     workload_identity_client_ids   = module.managed_identity.client_ids
     workload_identity_subjects     = module.workload_identity.subjects
   }
@@ -332,5 +334,6 @@ output "application_gateway" {
     id                = module.application_gateway.id
     public_ip_address = module.application_gateway.public_ip_address
     public_ip_fqdn    = module.application_gateway.public_ip_fqdn
+    waf_policy_name   = module.application_gateway.waf_policy_name
   }
 }
