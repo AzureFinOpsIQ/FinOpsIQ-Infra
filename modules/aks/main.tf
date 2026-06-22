@@ -41,6 +41,14 @@ resource "azurerm_kubernetes_cluster" "this" {
   oms_agent {
     log_analytics_workspace_id = var.log_analytics_workspace_id
   }
+
+  dynamic "ingress_application_gateway" {
+    for_each = var.ingress_application_gateway_id == null ? [] : [var.ingress_application_gateway_id]
+
+    content {
+      gateway_id = ingress_application_gateway.value
+    }
+  }
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "user" {

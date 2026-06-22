@@ -87,6 +87,25 @@ variable "acr" {
   })
 }
 
+variable "application_gateway" {
+  description = "Application Gateway WAF configuration for public ingress."
+  type = object({
+    name                   = string
+    public_ip_name         = string
+    subnet_key             = string
+    sku_name               = string
+    sku_tier               = string
+    autoscale_min_capacity = number
+    autoscale_max_capacity = number
+    frontend_port          = number
+    waf_enabled            = bool
+    waf_firewall_mode      = string
+    waf_rule_set_type      = string
+    waf_rule_set_version   = string
+    zones                  = optional(list(string), [])
+  })
+}
+
 variable "keyvault" {
   description = "Key Vault configuration."
   type = object({

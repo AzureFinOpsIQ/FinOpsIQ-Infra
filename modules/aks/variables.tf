@@ -38,6 +38,12 @@ variable "aks_subnet_id" {
   type        = string
 }
 
+variable "ingress_application_gateway_id" {
+  description = "Existing Application Gateway ID used by the AKS AGIC add-on."
+  type        = string
+  default     = null
+}
+
 variable "system_node_pool" {
   description = "System node pool configuration."
   type = object({

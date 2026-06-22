@@ -78,6 +78,28 @@ module "acr" {
   tags                = local.common_tags
 }
 
+module "application_gateway" {
+  source                 = "../../modules/application-gateway"
+  name                   = var.application_gateway.name
+  public_ip_name         = var.application_gateway.public_ip_name
+  resource_group_name    = module.resource_group.name
+  location               = module.resource_group.location
+  subnet_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.application_gateway.subnet_key].name}"
+  sku_name               = var.application_gateway.sku_name
+  sku_tier               = var.application_gateway.sku_tier
+  autoscale_min_capacity = var.application_gateway.autoscale_min_capacity
+  autoscale_max_capacity = var.application_gateway.autoscale_max_capacity
+  frontend_port          = var.application_gateway.frontend_port
+  waf_enabled            = var.application_gateway.waf_enabled
+  waf_firewall_mode      = var.application_gateway.waf_firewall_mode
+  waf_rule_set_type      = var.application_gateway.waf_rule_set_type
+  waf_rule_set_version   = var.application_gateway.waf_rule_set_version
+  zones                  = var.application_gateway.zones
+  tags                   = local.common_tags
+
+  depends_on = [module.network]
+}
+
 module "keyvault" {
   source                        = "../../modules/keyvault"
   name                          = var.keyvault.name
@@ -165,24 +187,25 @@ module "managed_identity" {
 }
 
 module "aks" {
-  source                     = "../../modules/aks"
-  name                       = var.aks.name
-  resource_group_name        = module.resource_group.name
-  location                   = module.resource_group.location
-  dns_prefix                 = var.aks.dns_prefix
-  kubernetes_version         = var.aks.kubernetes_version
-  tenant_id                  = var.tenant_id
-  aks_subnet_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
-  system_node_pool           = var.aks.system_node_pool
-  user_node_pools            = var.aks.user_node_pools
-  network_policy             = var.aks.network_policy
-  service_cidr               = var.aks.service_cidr
-  dns_service_ip             = var.aks.dns_service_ip
-  azure_rbac_enabled         = var.aks.azure_rbac_enabled
-  log_analytics_workspace_id = module.monitor.id
-  tags                       = local.common_tags
+  source                         = "../../modules/aks"
+  name                           = var.aks.name
+  resource_group_name            = module.resource_group.name
+  location                       = module.resource_group.location
+  dns_prefix                     = var.aks.dns_prefix
+  kubernetes_version             = var.aks.kubernetes_version
+  tenant_id                      = var.tenant_id
+  aks_subnet_id                  = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
+  system_node_pool               = var.aks.system_node_pool
+  user_node_pools                = var.aks.user_node_pools
+  network_policy                 = var.aks.network_policy
+  service_cidr                   = var.aks.service_cidr
+  dns_service_ip                 = var.aks.dns_service_ip
+  azure_rbac_enabled             = var.aks.azure_rbac_enabled
+  log_analytics_workspace_id     = module.monitor.id
+  ingress_application_gateway_id = module.application_gateway.id
+  tags                           = local.common_tags
 
-  depends_on = [module.network]
+  depends_on = [module.network, module.application_gateway]
 }
 
 module "workload_identity" {
@@ -207,6 +230,16 @@ module "role_assignments" {
         scope                = module.acr.id
         role_definition_name = "AcrPull"
         principal_id         = module.aks.kubelet_identity_object_id
+      }
+      agic_appgw_contributor = {
+        scope                = module.application_gateway.id
+        role_definition_name = "Contributor"
+        principal_id         = module.aks.ingress_application_gateway_identity_object_id
+      }
+      agic_resource_group_reader = {
+        scope                = module.resource_group.id
+        role_definition_name = "Reader"
+        principal_id         = module.aks.ingress_application_gateway_identity_object_id
       }
     },
     {
@@ -273,6 +306,9 @@ output "helm_values" {
     azure_search_endpoint          = module.ai_search.endpoint
     azure_openai_endpoint          = module.openai.endpoint
     azure_openai_deployment_names  = module.openai.deployment_names
+    application_gateway_id         = module.application_gateway.id
+    application_gateway_name       = module.application_gateway.name
+    application_gateway_public_ip  = module.application_gateway.public_ip_address
     workload_identity_client_ids   = module.managed_identity.client_ids
     workload_identity_subjects     = module.workload_identity.subjects
   }
@@ -286,5 +322,15 @@ output "aks" {
     id                  = module.aks.id
     oidc_issuer_url     = module.aks.oidc_issuer_url
     node_resource_group = module.aks.node_resource_group
+  }
+}
+
+output "application_gateway" {
+  description = "Public Application Gateway WAF outputs."
+  value = {
+    name              = module.application_gateway.name
+    id                = module.application_gateway.id
+    public_ip_address = module.application_gateway.public_ip_address
+    public_ip_fqdn    = module.application_gateway.public_ip_fqdn
   }
 }

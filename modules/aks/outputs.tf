@@ -27,3 +27,8 @@ output "user_node_pool_ids" {
   description = "User node pool IDs keyed by logical name."
   value       = { for key, pool in azurerm_kubernetes_cluster_node_pool.user : key => pool.id }
 }
+
+output "ingress_application_gateway_identity_object_id" {
+  description = "Object ID for the AGIC managed identity created by the AKS ingress application gateway add-on."
+  value       = try(azurerm_kubernetes_cluster.this.ingress_application_gateway[0].ingress_application_gateway_identity[0].object_id, null)
+}

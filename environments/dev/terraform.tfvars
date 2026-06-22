@@ -25,6 +25,11 @@ network = {
       address_prefixes  = ["10.40.4.0/22"]
       service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
     }
+    app_gateway = {
+      name              = "snet-appgw"
+      address_prefixes  = ["10.40.8.0/24"]
+      service_endpoints = []
+    }
   }
 }
 
@@ -42,6 +47,22 @@ application_insights = {
 acr = {
   name = "acrfinopsiqdev"
   sku  = "Premium"
+}
+
+application_gateway = {
+  name                   = "agw-finopsiq-dev"
+  public_ip_name         = "pip-agw-finopsiq-dev"
+  subnet_key             = "app_gateway"
+  sku_name               = "WAF_v2"
+  sku_tier               = "WAF_v2"
+  autoscale_min_capacity = 1
+  autoscale_max_capacity = 2
+  frontend_port          = 80
+  waf_enabled            = true
+  waf_firewall_mode      = "Prevention"
+  waf_rule_set_type      = "OWASP"
+  waf_rule_set_version   = "3.2"
+  zones                  = []
 }
 
 keyvault = {
