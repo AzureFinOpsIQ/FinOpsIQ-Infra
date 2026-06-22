@@ -168,8 +168,9 @@ Commit: <sha>
 Author: <actor>
 Terraform Plan Summary: Add: <n>, Modify: <n>, Destroy: <n>
 Cost Estimate: Infracost placeholder only
+View workflow: <workflow-url>
 
-Terraform plan completed. Awaiting approval.
+Terraform plan completed. Review the saved plan artifact, then approve the dev GitHub Environment deployment gate to run apply.
 ```
 
 ### Success
@@ -226,7 +227,7 @@ infrastructure change
   │
   ▼
 Stage 1: Security Scan
-  └─ tfsec, fail HIGH/CRITICAL
+  └─ Checkov, fail HIGH/CRITICAL
   │
   ▼
 Stage 2: Terraform Quality
@@ -242,10 +243,10 @@ Stage 3: Terraform Plan
   └─ upload saved plan artifact
   │
   ▼
-Stage 4: Slack Plan Ready
+Stage 4: Slack Plan Ready with View workflow button
   │
   ▼
-Stage 5: GitHub Environment Approval: dev
+Stage 5: GitHub Environment Approval: dev required before apply
   │
   ▼
 Stage 6: Terraform Apply
@@ -279,7 +280,7 @@ terraform plan -detailed-exitcode
 ## Notes
 
 - Pull requests run scan, quality, and plan only.
-- Apply only runs for push events on `main`.
+- Apply only runs for push events on `main` after the protected GitHub Environment `dev` is manually reviewed and approved.
 - Scheduled drift detection never applies changes.
 - The saved plan artifact is retained for one day.
 - Output summaries do not print sensitive output values.

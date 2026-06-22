@@ -223,8 +223,9 @@ jobs:
             --arg commit "${GITHUB_SHA}" \
             --arg author "${GITHUB_ACTOR}" \
             --arg summary "${PLAN_SUMMARY}" \
+            --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             '{
-              text: "Terraform plan completed. Awaiting approval.",
+              text: "Terraform plan completed. Review the workflow and approve the DEV environment gate before apply.",
               blocks: [
                 {type: "header", text: {type: "plain_text", text: "Terraform Infrastructure - PLAN READY"}},
                 {type: "section", fields: [
@@ -236,13 +237,16 @@ jobs:
                   {type: "mrkdwn", text: "*Terraform Plan Summary:*\n\($summary)"},
                   {type: "mrkdwn", text: "*Cost Estimate:*\nInfracost placeholder only"}
                 ]},
-                {type: "section", text: {type: "mrkdwn", text: "Terraform plan completed. Awaiting approval."}}
+                {type: "section", text: {type: "mrkdwn", text: "Terraform plan completed. Review the saved plan artifact, then approve the *dev* GitHub Environment deployment gate to run apply."}},
+                {type: "actions", elements: [
+                  {type: "button", text: {type: "plain_text", text: "View workflow"}, url: $workflow_url}
+                ]}
               ]
             }' > slack-payload.json
           curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
 
   terraform_apply:
-    name: "Stage 6 - Terraform Apply"
+    name: "Stage 6 - Terraform Apply - Manual Approval Required"
     runs-on: ubuntu-latest
     needs:
       - notify_plan_ready
