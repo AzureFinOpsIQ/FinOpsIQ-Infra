@@ -107,37 +107,20 @@ jobs:
           path: bootstrap/bootstrap-outputs.json
           retention-days: 30
 
-      - name: Create or update GitHub repository variables
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Backend configuration for main pipeline
+        working-directory: bootstrap
         run: |
-          resource_group_name="$(terraform -chdir=bootstrap output -raw resource_group_name)"
-          storage_account_name="$(terraform -chdir=bootstrap output -raw storage_account_name)"
-          container_name="$(terraform -chdir=bootstrap output -raw container_name)"
-
-          gh variable set TF_STATE_RESOURCE_GROUP --body "${resource_group_name}"
-          gh variable set TF_STATE_STORAGE_ACCOUNT --body "${storage_account_name}"
-          gh variable set TF_STATE_CONTAINER --body "${container_name}"
-
-      - name: Verify GitHub repository variables
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh variable get TF_STATE_RESOURCE_GROUP >/dev/null
-          gh variable get TF_STATE_STORAGE_ACCOUNT >/dev/null
-          gh variable get TF_STATE_CONTAINER >/dev/null
-
-          echo "Confirmed repository variables were created or updated:"
-          echo "- TF_STATE_RESOURCE_GROUP"
-          echo "- TF_STATE_STORAGE_ACCOUNT"
-          echo "- TF_STATE_CONTAINER"
-
           {
             echo ""
-            echo "### GitHub Repository Variables"
+            echo "## Copy these values into GitHub Repository Variables"
             echo ""
-            echo "Confirmed these variables were created or updated for the main Terraform pipeline:"
+            echo "| Variable | Value |"
+            echo "|----------|-------|"
+            echo "| TF_STATE_RESOURCE_GROUP | $(terraform output -raw resource_group_name) |"
+            echo "| TF_STATE_STORAGE_ACCOUNT | $(terraform output -raw storage_account_name) |"
+            echo "| TF_STATE_CONTAINER | $(terraform output -raw container_name) |"
             echo ""
+            echo "Create these Repository Variables manually:"
             echo "- TF_STATE_RESOURCE_GROUP"
             echo "- TF_STATE_STORAGE_ACCOUNT"
             echo "- TF_STATE_CONTAINER"

@@ -162,16 +162,15 @@ AZURE_SUBSCRIPTION_ID
 
 The workflow uses GitHub OIDC through `azure/login`. No Azure client secret is required.
 
-The workflow also requires repository permission to update GitHub Actions variables. The workflow declares:
+The workflow only needs read access to the repository contents and OIDC token issuance for Azure login:
 
 ```yaml
 permissions:
   contents: read
   id-token: write
-  actions: write
 ```
 
-Repository settings must allow GitHub Actions to read and write repository settings used by Actions variables.
+Repository variables are intentionally not created automatically by this workflow. The backend values are printed in the workflow summary and should be copied manually into GitHub repository variables.
 
 ## Optional workflow inputs
 
@@ -201,9 +200,11 @@ dev_state_key
 prod_state_key
 ```
 
-## Repository variables populated automatically
+## Repository variables populated manually
 
-After bootstrap completes, the workflow creates or updates these GitHub repository variables automatically using `gh`:
+After bootstrap completes, the workflow prints the backend values in the GitHub Actions job summary.
+
+For security and operational control, copy these values manually into GitHub repository variables:
 
 ```text
 TF_STATE_RESOURCE_GROUP=<resource_group_name output>
@@ -217,7 +218,22 @@ The values are read directly from Terraform outputs:
 - `storage_account_name`
 - `container_name`
 
-The workflow verifies the variables exist after creation/update and prints a confirmation message.
+To add them:
+
+1. Open the `AzureFinOpsIQ/FinOpsIQ-Infra` repository.
+2. Go to **Settings**.
+3. Go to **Secrets and variables**.
+4. Open **Actions**.
+5. Select **Variables**.
+6. Create or update:
+
+   ```text
+   TF_STATE_RESOURCE_GROUP
+   TF_STATE_STORAGE_ACCOUNT
+   TF_STATE_CONTAINER
+   ```
+
+The main Terraform pipeline consumes these variables during backend initialization.
 
 ## Main Terraform backend consumption
 

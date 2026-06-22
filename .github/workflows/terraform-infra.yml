@@ -142,6 +142,10 @@ jobs:
             -backend-config="key=${TF_STATE_KEY}" \
             -backend-config="use_azuread_auth=true"
 
+      - name: Import existing DEV resources into Terraform state
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: bash scripts/import-existing-dev.sh
+
       - name: Terraform plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform plan -input=false -out=dev.tfplan

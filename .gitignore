@@ -31,3 +31,6 @@ bootstrap/bootstrap-outputs.json
 *.log
 *.tmp
 *.cache
+
+# Local validation sandboxes
+.tmp-*/
