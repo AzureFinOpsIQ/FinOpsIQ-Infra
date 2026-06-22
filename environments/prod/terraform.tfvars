@@ -20,6 +20,11 @@ network = {
       address_prefixes  = ["10.50.0.0/22"]
       service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
     }
+    aks_nodes = {
+      name              = "snet-aks-nodes"
+      address_prefixes  = ["10.50.4.0/22"]
+      service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
+    }
   }
 }
 
@@ -142,7 +147,7 @@ aks = {
   name               = "aks-finopsiq-prod"
   dns_prefix         = "aks-finopsiq-prod"
   kubernetes_version = "1.34"
-  subnet_key         = "aks"
+  subnet_key         = "aks_nodes"
   network_policy     = "azure"
   service_cidr       = "10.51.0.0/16"
   dns_service_ip     = "10.51.0.10"
@@ -153,7 +158,7 @@ aks = {
     node_count                  = 1
     enable_auto_scaling         = true
     min_count                   = 1
-    max_count                   = 3
+    max_count                   = 2
     max_pods                    = 50
     os_disk_size_gb             = 64
     temporary_name_for_rotation = "sysrot"
