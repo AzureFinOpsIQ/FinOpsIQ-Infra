@@ -81,11 +81,22 @@ Entity type: Pull request
 Name: github-pull-request
 ```
 
+Because the Terraform apply job uses the protected GitHub Environment named `dev`, add another federated credential:
+
+```text
+Organization: AzureFinOpsIQ
+Repository: FinOpsIQ-Infra
+Entity type: Environment
+GitHub environment name: dev
+Name: github-environment-dev
+```
+
 The underlying OIDC subjects are:
 
 ```text
 repo:AzureFinOpsIQ/FinOpsIQ-Infra:ref:refs/heads/main
 repo:AzureFinOpsIQ/FinOpsIQ-Infra:pull_request
+repo:AzureFinOpsIQ/FinOpsIQ-Infra:environment:dev
 ```
 
 Audience:
