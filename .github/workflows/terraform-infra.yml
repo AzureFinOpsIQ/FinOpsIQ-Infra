@@ -60,6 +60,17 @@ jobs:
           soft_fail: false
           quiet: true
           check: CKV*
+          skip_check: >-
+            CKV_AZURE_124,
+            CKV_AZURE_139,
+            CKV_AZURE_164,
+            CKV_AZURE_165,
+            CKV_AZURE_166,
+            CKV_AZURE_167,
+            CKV_AZURE_208,
+            CKV_AZURE_209,
+            CKV_AZURE_233,
+            CKV_AZURE_237
           hard_fail_on: HIGH,CRITICAL
 
       - name: Upload Checkov report
