@@ -22,14 +22,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   identity {
-    type         = "UserAssigned"
-    identity_ids = [var.cluster_identity_id]
-  }
-
-  kubelet_identity {
-    client_id                 = var.kubelet_identity.client_id
-    object_id                 = var.kubelet_identity.object_id
-    user_assigned_identity_id = var.kubelet_identity.identity_id
+    type = "SystemAssigned"
   }
 
   network_profile {

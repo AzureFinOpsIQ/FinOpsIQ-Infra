@@ -87,6 +87,7 @@ storage = {
 }
 
 ai_search = {
+  location                      = "eastus"
   name                          = "search-finopsiq-prod"
   sku                           = "standard"
   replica_count                 = 2
@@ -103,10 +104,10 @@ openai = {
   local_auth_enabled            = false
   deployments = {
     chat = {
-      name          = "gpt-4o"
+      name          = "gpt-4.1-mini"
       model_format  = "OpenAI"
-      model_name    = "gpt-4o"
-      model_version = "2024-11-20"
+      model_name    = "gpt-4.1-mini"
+      model_version = "2025-04-14"
       sku_name      = "GlobalStandard"
       capacity      = 20
     }
@@ -122,8 +123,6 @@ openai = {
 }
 
 managed_identities = {
-  aks_cluster  = { name = "id-finopsiq-prod-aks" }
-  aks_kubelet  = { name = "id-finopsiq-prod-kubelet" }
   auth         = { name = "id-finopsiq-prod-auth" }
   collection   = { name = "id-finopsiq-prod-collection" }
   processing   = { name = "id-finopsiq-prod-processing" }
@@ -140,16 +139,14 @@ workload_service_accounts = {
 }
 
 aks = {
-  name                 = "aks-finopsiq-prod"
-  dns_prefix           = "aks-finopsiq-prod"
-  kubernetes_version   = "1.29"
-  subnet_key           = "aks"
-  cluster_identity_key = "aks_cluster"
-  kubelet_identity_key = "aks_kubelet"
-  network_policy       = "azure"
-  service_cidr         = "10.51.0.0/16"
-  dns_service_ip       = "10.51.0.10"
-  azure_rbac_enabled   = true
+  name               = "aks-finopsiq-prod"
+  dns_prefix         = "aks-finopsiq-prod"
+  kubernetes_version = "1.29"
+  subnet_key         = "aks"
+  network_policy     = "azure"
+  service_cidr       = "10.51.0.0/16"
+  dns_service_ip     = "10.51.0.10"
+  azure_rbac_enabled = true
   system_node_pool = {
     name                = "system"
     vm_size             = "Standard_D2s_v3"

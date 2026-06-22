@@ -9,10 +9,11 @@ Workflow:
 Scope:
 
 - DEV only
-- `main` branch only
+- `main` branch only for apply
 - Terraform root: `environments/dev`
 - Infrastructure only
-- No AKS or Helm deployment
+- No Docker image build
+- No Helm deployment
 - No application deployment
 
 ## Trigger Rules
@@ -23,7 +24,7 @@ The workflow runs on:
 - pushes to `main`
 - daily schedule at `06:00 UTC`
 
-Only changes under these paths trigger the workflow:
+Only changes under these paths trigger push and pull request runs:
 
 ```text
 modules/**
@@ -32,8 +33,6 @@ environments/**
 ```
 
 ## Required GitHub Secrets
-
-Configure these as repository or environment secrets:
 
 ```text
 AZURE_CLIENT_ID
@@ -46,21 +45,19 @@ No `AZURE_CLIENT_SECRET` is used.
 
 ## Required GitHub Variables
 
-Configure these as repository or environment variables:
-
 ```text
 TF_STATE_RESOURCE_GROUP
 TF_STATE_STORAGE_ACCOUNT
 TF_STATE_CONTAINER
 ```
 
-The workflow uses a fixed DEV state key:
+The DEV state key is fixed:
 
 ```text
 dev/terraform.tfstate
 ```
 
-## Required GitHub Environment Configuration
+## Required GitHub Environment
 
 Create a GitHub Environment named:
 
@@ -79,11 +76,11 @@ The `terraform_apply` job uses:
 environment: dev
 ```
 
-This provides native GitHub manual approval before apply.
+This provides the native GitHub manual approval gate before apply.
 
-## Required Azure Federated Credential Configuration
+## Required Azure Federated Credentials
 
-Create a federated identity credential on the Azure application or user-assigned managed identity represented by `AZURE_CLIENT_ID`.
+Create federated identity credentials on the Azure application represented by `AZURE_CLIENT_ID`.
 
 Issuer:
 
@@ -97,32 +94,22 @@ Audience:
 api://AzureADTokenExchange
 ```
 
-Subject for main branch:
+Subjects:
 
 ```text
 repo:<OWNER>/<REPO>:ref:refs/heads/main
-```
-
-If pull requests also need Azure login during plan validation, add:
-
-```text
 repo:<OWNER>/<REPO>:pull_request
+repo:<OWNER>/<REPO>:environment:dev
 ```
 
-The principal must have permissions to read/write the Terraform backend and manage DEV infrastructure.
+The `environment:dev` subject is required because the apply job uses the protected GitHub Environment named `dev`.
 
-## Remote Backend Verification
+## Remote Backend
 
 Backend configuration is declared in:
 
 ```text
 environments/dev/backend.tf
-```
-
-```hcl
-terraform {
-  backend "azurerm" {}
-}
 ```
 
 The workflow initializes the backend with:
@@ -136,19 +123,7 @@ terraform init \
   -backend-config="use_azuread_auth=true"
 ```
 
-State file strategy:
-
-```text
-DEV:  dev/terraform.tfstate
-PROD: prod/terraform.tfstate
-```
-
-State locking:
-
-- The AzureRM backend stores state in Azure Blob Storage.
-- Terraform uses Azure Blob leases for state locking.
-- A concurrent run attempting to modify the same state key will fail to acquire the blob lease until the lock is released.
-- GitHub Actions also prevents concurrent DEV deployments with:
+Terraform uses Azure Blob leases for state locking. The workflow also uses:
 
 ```yaml
 concurrency:
@@ -156,57 +131,85 @@ concurrency:
   cancel-in-progress: false
 ```
 
-## Slack Message Templates
+## Deployment Flow
+
+```text
+Infrastructure change
+  |
+  v
+Stage 1: Security and Quality
+  - Checkov scan, fail HIGH/CRITICAL
+  - terraform init
+  - terraform validate
+  |
+  v
+Stage 2: Terraform Format, Plan and Slack
+  - terraform fmt -check -recursive
+  - terraform init
+  - import existing DEV resources into state
+  - terraform plan -out=dev.tfplan
+  - generate add/modify/destroy summary
+  - upload saved plan artifact
+  - Slack PLAN READY notification with View workflow button
+  |
+  v
+Stage 3: Terraform Apply
+  - waits for GitHub Environment approval: dev
+  - terraform init on the fresh runner
+  - downloads the reviewed dev.tfplan artifact
+  - terraform apply -auto-approve dev.tfplan
+  - captures terraform output and state list
+  |
+  v
+Stage 4: Slack Notification
+  - sends SUCCESS, FAILED, or SKIPPED summary
+  - includes View workflow button
+```
+
+## Why `terraform init` still runs in apply
+
+GitHub Actions jobs run on fresh runners. The apply job does not inherit the `.terraform` directory, backend configuration, provider plugins, or authentication context from the plan job.
+
+The apply job must run `terraform init` so it can connect to the remote AzureRM backend and acquire the state lock.
+
+It does not regenerate the plan. It downloads and applies the reviewed artifact:
+
+```text
+dev.tfplan
+```
+
+This preserves the reviewed-plan promotion flow.
+
+## Slack Messages
 
 ### Plan Ready
 
-```text
-Environment: DEV
-Status: PLAN READY
-Repository: <repo>
-Commit: <sha>
-Author: <actor>
-Terraform Plan Summary: Add: <n>, Modify: <n>, Destroy: <n>
-Cost Estimate: Infracost placeholder only
-View workflow: <workflow-url>
+Includes:
 
-Terraform plan completed. Review the saved plan artifact, then approve the dev GitHub Environment deployment gate to run apply.
-```
+- Environment
+- Repository
+- Commit
+- Author
+- Plan summary
+- Cost-estimation placeholder
+- View workflow button
 
-### Success
+### Final Notification
 
-```text
-Environment: DEV
-Status: SUCCESS
-Resources created: <n>
-Resources updated: <n>
-Deployment duration: <seconds>s
-```
+Includes:
 
-### Failure
-
-```text
-Environment: DEV
-Status: FAILED
-Failed stage: <stage>
-Workflow URL: <url>
-Commit SHA: <sha>
-```
-
-### Drift Detected
-
-```text
-Environment: DEV
-Status: DRIFT DETECTED
-Plan Summary: Add: <n>, Modify: <n>, Destroy: <n>
-Workflow URL: <url>
-
-No automatic correction was applied.
-```
+- SUCCESS, FAILED, or SKIPPED
+- Resources created
+- Resources updated
+- Resources destroyed
+- State resource count
+- Deployment duration
+- Failed/skipped stage if applicable
+- View workflow button
 
 ## Drift Detection
 
-Scheduled drift detection runs:
+Scheduled drift detection runs daily:
 
 ```bash
 terraform plan -detailed-exitcode
@@ -220,68 +223,12 @@ Behavior:
 | 2 | Drift detected | Send Slack alert; do not apply |
 | 1 | Failure | Send Slack failure alert |
 
-## Pipeline Execution Flow
-
-```text
-infrastructure change
-  │
-  ▼
-Stage 1: Security Scan
-  └─ Checkov, fail HIGH/CRITICAL
-  │
-  ▼
-Stage 2: Terraform Quality
-  ├─ terraform fmt -check -recursive
-  ├─ terraform init
-  └─ terraform validate
-  │
-  ▼
-Stage 3: Terraform Plan
-  ├─ terraform plan -out=dev.tfplan
-  ├─ generate add/modify/destroy summary
-  ├─ cost estimation placeholder
-  └─ upload saved plan artifact
-  │
-  ▼
-Stage 4: Slack Plan Ready with View workflow button
-  │
-  ▼
-Stage 5: GitHub Environment Approval: dev required before apply
-  │
-  ▼
-Stage 6: Terraform Apply
-  ├─ download saved dev.tfplan artifact
-  └─ terraform apply -auto-approve dev.tfplan
-  │
-  ▼
-Stage 7: Post Deployment Validation
-  ├─ terraform output
-  └─ terraform state list
-  │
-  ▼
-Stage 8: Slack Success / Failure
-```
-
-Scheduled drift flow:
-
-```text
-cron 0 6 * * *
-  │
-  ▼
-terraform init with AzureRM backend
-  │
-  ▼
-terraform plan -detailed-exitcode
-  ├─ exit 0: no drift
-  ├─ exit 2: Slack drift alert, no apply
-  └─ exit 1: Slack failure alert
-```
+Scheduled drift detection never applies changes.
 
 ## Notes
 
-- Pull requests run scan, quality, and plan only.
+- Pull requests run security, quality, format, and plan only.
 - Apply only runs for push events on `main` after the protected GitHub Environment `dev` is manually reviewed and approved.
-- Scheduled drift detection never applies changes.
 - The saved plan artifact is retained for one day.
 - Output summaries do not print sensitive output values.
 - This workflow does not build Docker images, push containers, run Helm, or deploy Kubernetes workloads.

@@ -38,20 +38,6 @@ variable "aks_subnet_id" {
   type        = string
 }
 
-variable "cluster_identity_id" {
-  description = "User-assigned identity resource ID for the AKS control plane."
-  type        = string
-}
-
-variable "kubelet_identity" {
-  description = "Pre-created kubelet identity."
-  type = object({
-    identity_id = string
-    client_id   = string
-    object_id   = string
-  })
-}
-
 variable "system_node_pool" {
   description = "System node pool configuration."
   type = object({

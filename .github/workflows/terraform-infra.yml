@@ -42,8 +42,8 @@ env:
   TF_LOCK_TIMEOUT: 15m
 
 jobs:
-  security_scan:
-    name: "Stage 1 - Security Scan"
+  security_quality:
+    name: "Stage 1 - Security and Quality"
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     steps:
@@ -71,15 +71,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  terraform_quality:
-    name: "Stage 2 - Terraform Quality"
-    runs-on: ubuntu-latest
-    needs:
-      - security_scan
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -91,9 +82,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Terraform format check
-        run: terraform fmt -check -recursive .
 
       - name: Terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -110,10 +98,11 @@ jobs:
         run: terraform validate
 
   terraform_plan:
-    name: "Stage 3 - Terraform Plan"
+    name: "Stage 2 - Terraform Format, Plan and Slack"
     runs-on: ubuntu-latest
     needs:
-      - terraform_quality
+      - security_quality
+    if: github.event_name != 'schedule'
     outputs:
       add_count: ${{ steps.plan_summary.outputs.add_count }}
       modify_count: ${{ steps.plan_summary.outputs.modify_count }}
@@ -134,6 +123,9 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive .
 
       - name: Terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -205,17 +197,11 @@ jobs:
             ${{ env.TF_WORKING_DIR }}/plan-summary.md
           retention-days: 1
 
-  notify_plan_ready:
-    name: "Stage 4 - Slack Notification - Plan Ready"
-    runs-on: ubuntu-latest
-    needs:
-      - terraform_plan
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
       - name: Send Slack plan-ready notification
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          PLAN_SUMMARY: ${{ needs.terraform_plan.outputs.summary_text }}
+          PLAN_SUMMARY: ${{ steps.plan_summary.outputs.summary_text }}
         run: |
           jq -n \
             --arg environment "DEV" \
@@ -247,14 +233,15 @@ jobs:
           curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
 
   terraform_apply:
-    name: "Stage 6 - Terraform Apply - Manual Approval Required"
+    name: "Stage 3 - Terraform Apply - Manual Approval Required"
     runs-on: ubuntu-latest
     needs:
-      - notify_plan_ready
+      - terraform_plan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: dev
     outputs:
       deployment_duration_seconds: ${{ steps.apply.outputs.deployment_duration_seconds }}
+      state_count: ${{ steps.post_apply.outputs.state_count }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -281,13 +268,13 @@ jobs:
             -backend-config="key=${TF_STATE_KEY}" \
             -backend-config="use_azuread_auth=true"
 
-      - name: Download saved Terraform plan
+      - name: Download reviewed Terraform plan
         uses: actions/download-artifact@v4
         with:
           name: terraform-dev-plan
           path: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform apply saved plan
+      - name: Terraform apply reviewed plan
         id: apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
@@ -296,43 +283,13 @@ jobs:
           END_TIME=$(date +%s)
           echo "deployment_duration_seconds=$((END_TIME - START_TIME))" >> "${GITHUB_OUTPUT}"
 
-  post_deployment_validation:
-    name: "Stage 7 - Post Deployment Validation"
-    runs-on: ubuntu-latest
-    needs:
-      - terraform_apply
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Azure login with OIDC
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Terraform init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: |
-          terraform init -input=false \
-            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
-            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
-            -backend-config="container_name=${TF_STATE_CONTAINER}" \
-            -backend-config="key=${TF_STATE_KEY}" \
-            -backend-config="use_azuread_auth=true"
-
-      - name: Capture Terraform outputs and state
+      - name: Post-apply Terraform outputs and state
+        id: post_apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           terraform output -json > terraform-outputs.json
           terraform state list > terraform-state-list.txt
+          STATE_COUNT=$(wc -l < terraform-state-list.txt | tr -d ' ')
           jq -r 'to_entries[] | "- \(.key): sensitive=\(.value.sensitive)"' terraform-outputs.json > outputs-summary.md
 
           {
@@ -342,19 +299,98 @@ jobs:
             echo ""
             echo "### Terraform State Resource Count"
             echo ""
-            echo "\`\`\`"
-            wc -l terraform-state-list.txt
-            echo "\`\`\`"
+            echo "${STATE_COUNT}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Upload Terraform validation artifacts
+          echo "state_count=${STATE_COUNT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload post-apply artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-dev-post-deployment-validation
+          name: terraform-dev-post-apply
           path: |
             ${{ env.TF_WORKING_DIR }}/outputs-summary.md
             ${{ env.TF_WORKING_DIR }}/terraform-state-list.txt
           retention-days: 14
+
+  notify_deployment:
+    name: "Stage 4 - Slack Notification"
+    runs-on: ubuntu-latest
+    needs:
+      - security_quality
+      - terraform_plan
+      - terraform_apply
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && always()
+    steps:
+      - name: Send Slack deployment notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SECURITY_QUALITY_RESULT: ${{ needs.security_quality.result }}
+          PLAN_RESULT: ${{ needs.terraform_plan.result }}
+          APPLY_RESULT: ${{ needs.terraform_apply.result }}
+          ADD_COUNT: ${{ needs.terraform_plan.outputs.add_count }}
+          MODIFY_COUNT: ${{ needs.terraform_plan.outputs.modify_count }}
+          DESTROY_COUNT: ${{ needs.terraform_plan.outputs.destroy_count }}
+          DURATION: ${{ needs.terraform_apply.outputs.deployment_duration_seconds }}
+          STATE_COUNT: ${{ needs.terraform_apply.outputs.state_count }}
+        run: |
+          STATUS="SUCCESS"
+          MESSAGE="Terraform infrastructure deployment succeeded."
+          FAILED_STAGE=""
+
+          if [ "${SECURITY_QUALITY_RESULT}" = "failure" ]; then
+            STATUS="FAILED"
+            MESSAGE="Terraform infrastructure deployment failed."
+            FAILED_STAGE="Security and Quality"
+          elif [ "${PLAN_RESULT}" = "failure" ]; then
+            STATUS="FAILED"
+            MESSAGE="Terraform infrastructure deployment failed."
+            FAILED_STAGE="Terraform Format, Plan and Slack"
+          elif [ "${APPLY_RESULT}" = "failure" ]; then
+            STATUS="FAILED"
+            MESSAGE="Terraform infrastructure deployment failed."
+            FAILED_STAGE="Terraform Apply"
+          elif [ "${APPLY_RESULT}" = "skipped" ]; then
+            STATUS="SKIPPED"
+            MESSAGE="Terraform apply was skipped."
+            FAILED_STAGE="Terraform Apply"
+          fi
+
+          jq -n \
+            --arg environment "DEV" \
+            --arg status "${STATUS}" \
+            --arg message "${MESSAGE}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg failed_stage "${FAILED_STAGE}" \
+            --arg created "${ADD_COUNT:-0}" \
+            --arg updated "${MODIFY_COUNT:-0}" \
+            --arg destroyed "${DESTROY_COUNT:-0}" \
+            --arg duration "${DURATION:-0}s" \
+            --arg state_count "${STATE_COUNT:-0}" \
+            '{
+              text: $message,
+              blocks: [
+                {type: "header", text: {type: "plain_text", text: ("Terraform Infrastructure - " + $status)}},
+                {type: "section", fields: [
+                  {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
+                  {type: "mrkdwn", text: "*Status:*\n\($status)"},
+                  {type: "mrkdwn", text: "*Repository:*\n\($repository)"},
+                  {type: "mrkdwn", text: "*Commit:*\n\($commit)"},
+                  {type: "mrkdwn", text: "*Resources Created:*\n\($created)"},
+                  {type: "mrkdwn", text: "*Resources Updated:*\n\($updated)"},
+                  {type: "mrkdwn", text: "*Resources Destroyed:*\n\($destroyed)"},
+                  {type: "mrkdwn", text: "*State Resources:*\n\($state_count)"},
+                  {type: "mrkdwn", text: "*Deployment Duration:*\n\($duration)"},
+                  {type: "mrkdwn", text: "*Failed/Skipped Stage:*\n\($failed_stage)"}
+                ]},
+                {type: "actions", elements: [
+                  {type: "button", text: {type: "plain_text", text: "View workflow"}, url: $workflow_url}
+                ]}
+              ]
+            }' > slack-payload.json
+          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
 
   drift_detection:
     name: "Scheduled Drift Detection - DEV"
@@ -483,98 +519,6 @@ jobs:
               text: "Terraform drift detection failed.",
               blocks: [
                 {type: "header", text: {type: "plain_text", text: "Terraform Drift Detection - FAILED"}},
-                {type: "section", fields: [
-                  {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
-                  {type: "mrkdwn", text: "*Status:*\n\($status)"},
-                  {type: "mrkdwn", text: "*Failed Stage:*\n\($failed_stage)"},
-                  {type: "mrkdwn", text: "*Commit SHA:*\n\($commit)"},
-                  {type: "mrkdwn", text: "*Workflow URL:*\n\($workflow_url)"}
-                ]}
-              ]
-            }' > slack-payload.json
-          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
-
-  notify_success:
-    name: "Stage 8 - Slack Notification - Success"
-    runs-on: ubuntu-latest
-    needs:
-      - terraform_plan
-      - terraform_apply
-      - post_deployment_validation
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
-    steps:
-      - name: Send Slack success notification
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          ADD_COUNT: ${{ needs.terraform_plan.outputs.add_count }}
-          MODIFY_COUNT: ${{ needs.terraform_plan.outputs.modify_count }}
-          DURATION: ${{ needs.terraform_apply.outputs.deployment_duration_seconds }}
-        run: |
-          jq -n \
-            --arg environment "DEV" \
-            --arg status "SUCCESS" \
-            --arg repository "${GITHUB_REPOSITORY}" \
-            --arg commit "${GITHUB_SHA}" \
-            --arg created "${ADD_COUNT}" \
-            --arg updated "${MODIFY_COUNT}" \
-            --arg duration "${DURATION}s" \
-            '{
-              text: "Terraform infrastructure deployment succeeded.",
-              blocks: [
-                {type: "header", text: {type: "plain_text", text: "Terraform Infrastructure - SUCCESS"}},
-                {type: "section", fields: [
-                  {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
-                  {type: "mrkdwn", text: "*Status:*\n\($status)"},
-                  {type: "mrkdwn", text: "*Repository:*\n\($repository)"},
-                  {type: "mrkdwn", text: "*Commit:*\n\($commit)"},
-                  {type: "mrkdwn", text: "*Resources Created:*\n\($created)"},
-                  {type: "mrkdwn", text: "*Resources Updated:*\n\($updated)"},
-                  {type: "mrkdwn", text: "*Deployment Duration:*\n\($duration)"}
-                ]}
-              ]
-            }' > slack-payload.json
-          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
-
-  notify_failure:
-    name: "Stage 8 - Slack Notification - Failure"
-    runs-on: ubuntu-latest
-    needs:
-      - security_scan
-      - terraform_quality
-      - terraform_plan
-      - notify_plan_ready
-      - terraform_apply
-      - post_deployment_validation
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && always() && contains(join(needs.*.result, ','), 'failure')
-    steps:
-      - name: Send Slack failure notification
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SECURITY_RESULT: ${{ needs.security_scan.result }}
-          QUALITY_RESULT: ${{ needs.terraform_quality.result }}
-          PLAN_RESULT: ${{ needs.terraform_plan.result }}
-          PLAN_NOTIFY_RESULT: ${{ needs.notify_plan_ready.result }}
-          APPLY_RESULT: ${{ needs.terraform_apply.result }}
-          POST_RESULT: ${{ needs.post_deployment_validation.result }}
-        run: |
-          FAILED_STAGE="unknown"
-          if [ "${SECURITY_RESULT}" = "failure" ]; then FAILED_STAGE="Security Scan"; fi
-          if [ "${QUALITY_RESULT}" = "failure" ]; then FAILED_STAGE="Terraform Quality"; fi
-          if [ "${PLAN_RESULT}" = "failure" ]; then FAILED_STAGE="Terraform Plan"; fi
-          if [ "${PLAN_NOTIFY_RESULT}" = "failure" ]; then FAILED_STAGE="Slack Plan Notification"; fi
-          if [ "${APPLY_RESULT}" = "failure" ]; then FAILED_STAGE="Terraform Apply"; fi
-          if [ "${POST_RESULT}" = "failure" ]; then FAILED_STAGE="Post Deployment Validation"; fi
-
-          jq -n \
-            --arg environment "DEV" \
-            --arg status "FAILED" \
-            --arg failed_stage "${FAILED_STAGE}" \
-            --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --arg commit "${GITHUB_SHA}" \
-            '{
-              text: "Terraform infrastructure deployment failed.",
-              blocks: [
-                {type: "header", text: {type: "plain_text", text: "Terraform Infrastructure - FAILED"}},
                 {type: "section", fields: [
                   {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
                   {type: "mrkdwn", text: "*Status:*\n\($status)"},

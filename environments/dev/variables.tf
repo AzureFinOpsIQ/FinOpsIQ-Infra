@@ -141,6 +141,7 @@ variable "storage" {
 variable "ai_search" {
   description = "Azure AI Search configuration."
   type = object({
+    location                      = string
     name                          = string
     sku                           = string
     replica_count                 = number
@@ -179,16 +180,14 @@ variable "managed_identities" {
 variable "aks" {
   description = "AKS configuration."
   type = object({
-    name                 = string
-    dns_prefix           = string
-    kubernetes_version   = string
-    subnet_key           = string
-    cluster_identity_key = string
-    kubelet_identity_key = string
-    network_policy       = string
-    service_cidr         = string
-    dns_service_ip       = string
-    azure_rbac_enabled   = bool
+    name               = string
+    dns_prefix         = string
+    kubernetes_version = string
+    subnet_key         = string
+    network_policy     = string
+    service_cidr       = string
+    dns_service_ip     = string
+    azure_rbac_enabled = bool
     system_node_pool = object({
       name                = string
       vm_size             = string

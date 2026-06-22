@@ -134,7 +134,7 @@ module "ai_search" {
   source                        = "../../modules/ai-search"
   name                          = var.ai_search.name
   resource_group_name           = module.resource_group.name
-  location                      = module.resource_group.location
+  location                      = var.ai_search.location
   sku                           = var.ai_search.sku
   replica_count                 = var.ai_search.replica_count
   partition_count               = var.ai_search.partition_count
@@ -165,20 +165,14 @@ module "managed_identity" {
 }
 
 module "aks" {
-  source              = "../../modules/aks"
-  name                = var.aks.name
-  resource_group_name = module.resource_group.name
-  location            = module.resource_group.location
-  dns_prefix          = var.aks.dns_prefix
-  kubernetes_version  = var.aks.kubernetes_version
-  tenant_id           = var.tenant_id
-  aks_subnet_id       = module.network.subnet_ids[var.aks.subnet_key]
-  cluster_identity_id = module.managed_identity.identity_ids[var.aks.cluster_identity_key]
-  kubelet_identity = {
-    identity_id = module.managed_identity.identity_ids[var.aks.kubelet_identity_key]
-    client_id   = module.managed_identity.client_ids[var.aks.kubelet_identity_key]
-    object_id   = module.managed_identity.principal_ids[var.aks.kubelet_identity_key]
-  }
+  source                     = "../../modules/aks"
+  name                       = var.aks.name
+  resource_group_name        = module.resource_group.name
+  location                   = module.resource_group.location
+  dns_prefix                 = var.aks.dns_prefix
+  kubernetes_version         = var.aks.kubernetes_version
+  tenant_id                  = var.tenant_id
+  aks_subnet_id              = module.network.subnet_ids[var.aks.subnet_key]
   system_node_pool           = var.aks.system_node_pool
   user_node_pools            = var.aks.user_node_pools
   network_policy             = var.aks.network_policy
@@ -211,7 +205,7 @@ module "role_assignments" {
       acr_pull_kubelet = {
         scope                = module.acr.id
         role_definition_name = "AcrPull"
-        principal_id         = module.managed_identity.principal_ids[var.aks.kubelet_identity_key]
+        principal_id         = module.aks.kubelet_identity_object_id
       }
     },
     {
