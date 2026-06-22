@@ -40,13 +40,16 @@ module "resource_group" {
 }
 
 module "network" {
-  source              = "../../modules/network"
-  name                = var.network.name
-  resource_group_name = module.resource_group.name
-  location            = module.resource_group.location
-  address_space       = var.network.address_space
-  subnets             = var.network.subnets
-  tags                = local.common_tags
+  source                  = "../../modules/network"
+  name                    = var.network.name
+  resource_group_name     = module.resource_group.name
+  location                = module.resource_group.location
+  address_space           = var.network.address_space
+  subnets                 = var.network.subnets
+  network_security_groups = var.network.network_security_groups
+  nat_gateways            = var.network.nat_gateways
+  private_dns_zones       = var.network.private_dns_zones
+  tags                    = local.common_tags
 }
 
 module "monitor" {
@@ -131,14 +134,18 @@ module "cosmosdb" {
 }
 
 module "servicebus" {
-  source              = "../../modules/servicebus"
-  namespace_name      = var.servicebus.namespace_name
-  topic_name          = var.servicebus.topic_name
-  resource_group_name = module.resource_group.name
-  location            = module.resource_group.location
-  sku                 = var.servicebus.sku
-  capacity            = var.servicebus.capacity
-  tags                = local.common_tags
+  source                        = "../../modules/servicebus"
+  namespace_name                = var.servicebus.namespace_name
+  topic_name                    = var.servicebus.topic_name
+  resource_group_name           = module.resource_group.name
+  location                      = module.resource_group.location
+  sku                           = var.servicebus.sku
+  capacity                      = var.servicebus.capacity
+  local_auth_enabled            = var.servicebus.local_auth_enabled
+  public_network_access_enabled = var.servicebus.public_network_access_enabled
+  minimum_tls_version           = var.servicebus.minimum_tls_version
+  subscriptions                 = var.servicebus.subscriptions
+  tags                          = local.common_tags
 }
 
 module "storage" {
@@ -177,6 +184,61 @@ module "openai" {
   local_auth_enabled            = var.openai.local_auth_enabled
   deployments                   = var.openai.deployments
   tags                          = local.common_tags
+}
+
+module "private_endpoints" {
+  source               = "../../modules/private-endpoints"
+  resource_group_name  = module.resource_group.name
+  location             = module.resource_group.location
+  subnet_id            = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.private_endpoints.subnet_key].name}"
+  private_dns_zone_ids = module.network.private_dns_zone_ids
+  private_endpoints = var.private_endpoints.enabled ? {
+    cosmos = {
+      name                            = var.private_endpoints.endpoint_names.cosmos
+      private_service_connection_name = "${var.environment}-cosmos"
+      resource_id                     = module.cosmosdb.account_id
+      subresource_name                = "Sql"
+      private_dns_zone_key            = "cosmos"
+    }
+    blob = {
+      name                            = var.private_endpoints.endpoint_names.blob
+      private_service_connection_name = "${var.environment}-blob"
+      resource_id                     = module.storage.account_id
+      subresource_name                = "blob"
+      private_dns_zone_key            = "blob"
+    }
+    vault = {
+      name                            = var.private_endpoints.endpoint_names.vault
+      private_service_connection_name = "${var.environment}-vault"
+      resource_id                     = module.keyvault.id
+      subresource_name                = "vault"
+      private_dns_zone_key            = "vault"
+    }
+    acr = {
+      name                            = var.private_endpoints.endpoint_names.acr
+      private_service_connection_name = "${var.environment}-acr"
+      resource_id                     = module.acr.id
+      subresource_name                = "registry"
+      private_dns_zone_key            = "acr"
+    }
+    search = {
+      name                            = var.private_endpoints.endpoint_names.search
+      private_service_connection_name = "${var.environment}-search"
+      resource_id                     = module.ai_search.id
+      subresource_name                = "searchService"
+      private_dns_zone_key            = "search"
+    }
+    openai = {
+      name                            = var.private_endpoints.endpoint_names.openai
+      private_service_connection_name = "${var.environment}-openai"
+      resource_id                     = module.openai.id
+      subresource_name                = "account"
+      private_dns_zone_key            = "openai"
+    }
+  } : {}
+  tags = local.common_tags
+
+  depends_on = [module.network]
 }
 
 module "managed_identity" {
@@ -263,12 +325,21 @@ module "role_assignments" {
     },
     {
       for key, principal_id in module.managed_identity.principal_ids :
-      "servicebus_${key}" => {
+      "servicebus_sender_${key}" => {
         scope                = module.servicebus.namespace_id
-        role_definition_name = "Azure Service Bus Data Owner"
+        role_definition_name = "Azure Service Bus Data Sender"
         principal_id         = principal_id
       }
-      if contains(keys(var.workload_service_accounts), key)
+      if contains(["auth", "collection", "processing", "ai"], key)
+    },
+    {
+      for key, principal_id in module.managed_identity.principal_ids :
+      "servicebus_receiver_${key}" => {
+        scope                = module.servicebus.namespace_id
+        role_definition_name = "Azure Service Bus Data Receiver"
+        principal_id         = principal_id
+      }
+      if contains(["processing", "ai", "notification"], key)
     },
     {
       for key, principal_id in module.managed_identity.principal_ids :
@@ -291,6 +362,21 @@ module "role_assignments" {
   )
 }
 
+module "cosmosdb_sql_role_assignments" {
+  source              = "../../modules/cosmosdb-sql-role-assignments"
+  resource_group_name = module.resource_group.name
+  account_name        = module.cosmosdb.account_name
+  account_id          = module.cosmosdb.account_id
+  database_scope      = module.cosmosdb.database_id
+  role_assignments = {
+    for key, principal_id in module.managed_identity.principal_ids :
+    key => {
+      principal_id = principal_id
+    }
+    if contains(keys(var.workload_service_accounts), key)
+  }
+}
+
 output "helm_values" {
   description = "AKS integration values required by the FinsOpsIQ Helm chart."
   value = {
@@ -301,6 +387,7 @@ output "helm_values" {
     cosmos_database                = module.cosmosdb.database_name
     service_bus_namespace          = module.servicebus.namespace_name
     service_bus_topic              = module.servicebus.topic_name
+    service_bus_subscriptions      = module.servicebus.subscription_names
     storage_blob_endpoint          = module.storage.primary_blob_endpoint
     storage_container              = module.storage.container_name
     applicationinsights_connection = module.application_insights.connection_string
@@ -315,6 +402,16 @@ output "helm_values" {
     workload_identity_subjects     = module.workload_identity.subjects
   }
   sensitive = true
+}
+
+output "private_networking" {
+  description = "Private networking outputs."
+  value = {
+    private_dns_zone_ids    = module.network.private_dns_zone_ids
+    private_endpoint_ids    = module.private_endpoints.private_endpoint_ids
+    nat_gateway_ids         = module.network.nat_gateway_ids
+    network_security_groups = module.network.network_security_group_ids
+  }
 }
 
 output "aks" {

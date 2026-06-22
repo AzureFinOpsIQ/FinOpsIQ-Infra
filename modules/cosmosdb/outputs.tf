@@ -18,6 +18,11 @@ output "database_name" {
   value       = azurerm_cosmosdb_sql_database.this.name
 }
 
+output "database_id" {
+  description = "Cosmos DB SQL database resource ID."
+  value       = azurerm_cosmosdb_sql_database.this.id
+}
+
 output "container_names" {
   description = "Cosmos DB container names."
   value       = { for key, container in azurerm_cosmosdb_sql_container.this : key => container.name }

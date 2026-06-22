@@ -55,10 +55,50 @@ variable "network" {
     name          = string
     address_space = list(string)
     subnets = map(object({
-      name              = string
-      address_prefixes  = list(string)
-      service_endpoints = optional(list(string), [])
+      name                              = string
+      address_prefixes                  = list(string)
+      service_endpoints                 = optional(list(string), [])
+      private_endpoint_network_policies = optional(string, null)
+      network_security_group_key        = optional(string, null)
+      nat_gateway_key                   = optional(string, null)
     }))
+    network_security_groups = optional(map(object({
+      name = string
+      security_rules = optional(list(object({
+        name                       = string
+        priority                   = number
+        direction                  = string
+        access                     = string
+        protocol                   = string
+        source_port_range          = string
+        destination_port_range     = string
+        source_address_prefix      = string
+        destination_address_prefix = string
+      })), [])
+    })), {})
+    nat_gateways = optional(map(object({
+      name                    = string
+      public_ip_name          = string
+      idle_timeout_in_minutes = optional(number, 10)
+      zones                   = optional(list(string), [])
+    })), {})
+    private_dns_zones = optional(map(string), {})
+  })
+}
+
+variable "private_endpoints" {
+  description = "Private endpoint configuration."
+  type = object({
+    enabled    = bool
+    subnet_key = string
+    endpoint_names = object({
+      cosmos = string
+      blob   = string
+      vault  = string
+      acr    = string
+      search = string
+      openai = string
+    })
   })
 }
 
@@ -140,10 +180,18 @@ variable "cosmosdb" {
 variable "servicebus" {
   description = "Service Bus configuration."
   type = object({
-    namespace_name = string
-    topic_name     = string
-    sku            = string
-    capacity       = optional(number, 0)
+    namespace_name                = string
+    topic_name                    = string
+    sku                           = string
+    capacity                      = optional(number, 0)
+    local_auth_enabled            = optional(bool, false)
+    public_network_access_enabled = optional(bool, true)
+    minimum_tls_version           = optional(string, "1.2")
+    subscriptions = optional(map(object({
+      max_delivery_count                   = optional(number, 5)
+      dead_lettering_on_message_expiration = optional(bool, true)
+      default_message_ttl                  = optional(string, "P7D")
+    })), {})
   })
 }
 

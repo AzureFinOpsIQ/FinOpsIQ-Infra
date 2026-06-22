@@ -21,15 +21,108 @@ network = {
       service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
     }
     aks_nodes = {
-      name              = "snet-aks-nodes"
-      address_prefixes  = ["10.40.4.0/22"]
-      service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
+      name                       = "snet-aks-nodes"
+      address_prefixes           = ["10.40.4.0/22"]
+      service_endpoints          = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
+      network_security_group_key = "aks"
+      nat_gateway_key            = "aks"
     }
     app_gateway = {
-      name              = "snet-appgw"
-      address_prefixes  = ["10.40.8.0/24"]
-      service_endpoints = []
+      name                       = "snet-appgw"
+      address_prefixes           = ["10.40.8.0/24"]
+      service_endpoints          = []
+      network_security_group_key = "app_gateway"
     }
+    private_endpoints = {
+      name                              = "snet-private-endpoints"
+      address_prefixes                  = ["10.40.9.0/24"]
+      service_endpoints                 = []
+      private_endpoint_network_policies = "Disabled"
+    }
+  }
+  network_security_groups = {
+    aks = {
+      name           = "nsg-finopsiq-dev-aks"
+      security_rules = []
+    }
+    app_gateway = {
+      name = "nsg-finopsiq-dev-appgw"
+      security_rules = [
+        {
+          name                       = "AllowHttpInternet"
+          priority                   = 100
+          direction                  = "Inbound"
+          access                     = "Allow"
+          protocol                   = "Tcp"
+          source_port_range          = "*"
+          destination_port_range     = "80"
+          source_address_prefix      = "Internet"
+          destination_address_prefix = "*"
+        },
+        {
+          name                       = "AllowHttpsInternet"
+          priority                   = 110
+          direction                  = "Inbound"
+          access                     = "Allow"
+          protocol                   = "Tcp"
+          source_port_range          = "*"
+          destination_port_range     = "443"
+          source_address_prefix      = "Internet"
+          destination_address_prefix = "*"
+        },
+        {
+          name                       = "AllowGatewayManager"
+          priority                   = 120
+          direction                  = "Inbound"
+          access                     = "Allow"
+          protocol                   = "Tcp"
+          source_port_range          = "*"
+          destination_port_range     = "65200-65535"
+          source_address_prefix      = "GatewayManager"
+          destination_address_prefix = "*"
+        },
+        {
+          name                       = "AllowAzureLoadBalancer"
+          priority                   = 130
+          direction                  = "Inbound"
+          access                     = "Allow"
+          protocol                   = "*"
+          source_port_range          = "*"
+          destination_port_range     = "*"
+          source_address_prefix      = "AzureLoadBalancer"
+          destination_address_prefix = "*"
+        }
+      ]
+    }
+  }
+  nat_gateways = {
+    aks = {
+      name                    = "nat-finopsiq-dev-aks"
+      public_ip_name          = "pip-finopsiq-dev-nat"
+      idle_timeout_in_minutes = 10
+      zones                   = []
+    }
+  }
+  private_dns_zones = {
+    cosmos = "privatelink.documents.azure.com"
+    blob   = "privatelink.blob.core.windows.net"
+    vault  = "privatelink.vaultcore.azure.net"
+    acr    = "privatelink.azurecr.io"
+    search = "privatelink.search.windows.net"
+    openai = "privatelink.openai.azure.com"
+  }
+}
+
+private_endpoints = {
+  enabled    = true
+  subnet_key = "private_endpoints"
+  endpoint_names = {
+    cosmos = "pe-finopsiq-dev-cosmos"
+    blob   = "pe-finopsiq-dev-blob"
+    vault  = "pe-finopsiq-dev-vault"
+    acr    = "pe-finopsiq-dev-acr"
+    search = "pe-finopsiq-dev-search"
+    openai = "pe-finopsiq-dev-openai"
   }
 }
 
@@ -99,10 +192,18 @@ cosmosdb = {
 }
 
 servicebus = {
-  namespace_name = "sb-finopsiq-dev"
-  topic_name     = "finops-events"
-  sku            = "Standard"
-  capacity       = 0
+  namespace_name                = "sb-finopsiq-dev"
+  topic_name                    = "finops-events"
+  sku                           = "Standard"
+  capacity                      = 0
+  local_auth_enabled            = false
+  public_network_access_enabled = true
+  minimum_tls_version           = "1.2"
+  subscriptions = {
+    processing-service   = {}
+    ai-service           = {}
+    notification-service = {}
+  }
 }
 
 storage = {
