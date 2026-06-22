@@ -172,7 +172,7 @@ module "aks" {
   dns_prefix                 = var.aks.dns_prefix
   kubernetes_version         = var.aks.kubernetes_version
   tenant_id                  = var.tenant_id
-  aks_subnet_id              = module.network.subnet_ids[var.aks.subnet_key]
+  aks_subnet_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
   system_node_pool           = var.aks.system_node_pool
   user_node_pools            = var.aks.user_node_pools
   network_policy             = var.aks.network_policy
@@ -181,6 +181,8 @@ module "aks" {
   azure_rbac_enabled         = var.aks.azure_rbac_enabled
   log_analytics_workspace_id = module.monitor.id
   tags                       = local.common_tags
+
+  depends_on = [module.network]
 }
 
 module "workload_identity" {
