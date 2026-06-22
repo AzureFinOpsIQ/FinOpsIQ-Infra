@@ -153,7 +153,7 @@ aks = {
     node_count                  = 1
     enable_auto_scaling         = true
     min_count                   = 1
-    max_count                   = 5
+    max_count                   = 3
     max_pods                    = 50
     os_disk_size_gb             = 64
     temporary_name_for_rotation = "sysrot"
@@ -165,7 +165,7 @@ aks = {
       node_count          = 1
       enable_auto_scaling = true
       min_count           = 1
-      max_count           = 5
+      max_count           = 3
       max_pods            = 50
       os_disk_size_gb     = 128
     }
