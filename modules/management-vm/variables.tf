@@ -36,7 +36,7 @@ variable "bastion_subnet_address_prefix" {
 variable "vm_size" {
   description = "Management VM size."
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_D2s_v3"
 }
 
 variable "admin_username" {
@@ -45,7 +45,7 @@ variable "admin_username" {
 }
 
 variable "admin_password" {
-  description = "Temporary placeholder password used for management VM access through Azure Bastion. Replace through secure CI/CD variables before apply."
+  description = "Management VM administrator password."
   type        = string
   sensitive   = true
 }

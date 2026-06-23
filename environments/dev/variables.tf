@@ -174,7 +174,7 @@ variable "management_vm" {
     subnet_key                   = string
     vm_size                      = optional(string, "Standard_D2s_v3")
     admin_username               = string
-    admin_password               = string
+    admin_password_secret_name   = optional(string, "management-vm-admin-password")
     os_disk_size_gb              = optional(number, 64)
     os_disk_storage_account_type = optional(string, "Premium_LRS")
   })

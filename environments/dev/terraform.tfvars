@@ -181,7 +181,7 @@ management_vm = {
   subnet_key                   = "management"
   vm_size                      = "Standard_D2s_v3"
   admin_username               = "finopsadmin"
-  admin_password               = "CHANGE_ME_ManagementVmPassword_123!"
+  admin_password_secret_name   = "management-vm-admin-password"
   os_disk_size_gb              = 64
   os_disk_storage_account_type = "StandardSSD_LRS"
 }

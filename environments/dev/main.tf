@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 4.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -16,6 +20,8 @@ provider "azurerm" {
 
   features {}
 }
+
+data "azurerm_client_config" "current" {}
 
 locals {
   common_tags = merge(
@@ -33,6 +39,12 @@ locals {
 
   bastion_subnet_id    = try(module.network.subnet_ids[var.bastion.subnet_key], "")
   management_subnet_id = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
+}
+
+resource "random_password" "management_vm_admin" {
+  length           = 24
+  special          = true
+  override_special = "!@#%*-_=+?"
 }
 
 module "resource_group" {
@@ -108,7 +120,7 @@ module "management_vm" {
   bastion_subnet_address_prefix = var.network.subnets[var.bastion.subnet_key].address_prefixes[0]
   vm_size                       = var.management_vm.vm_size
   admin_username                = var.management_vm.admin_username
-  admin_password                = var.management_vm.admin_password
+  admin_password                = random_password.management_vm_admin.result
   os_disk_size_gb               = var.management_vm.os_disk_size_gb
   os_disk_storage_account_type  = var.management_vm.os_disk_storage_account_type
   custom_data_path              = "${path.module}/../../scripts/bootstrap-management-vm.sh"
@@ -150,6 +162,21 @@ module "keyvault" {
   soft_delete_retention_days    = var.keyvault.soft_delete_retention_days
   public_network_access_enabled = var.keyvault.public_network_access_enabled
   tags                          = local.common_tags
+}
+
+resource "azurerm_role_assignment" "terraform_keyvault_secrets_officer" {
+  scope                = module.keyvault.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+resource "azurerm_key_vault_secret" "management_vm_admin_password" {
+  name         = var.management_vm.admin_password_secret_name
+  value        = random_password.management_vm_admin.result
+  key_vault_id = module.keyvault.id
+  tags         = local.common_tags
+
+  depends_on = [azurerm_role_assignment.terraform_keyvault_secrets_officer]
 }
 
 module "cosmosdb" {
