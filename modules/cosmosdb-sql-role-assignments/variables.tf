@@ -14,7 +14,7 @@ variable "account_id" {
 }
 
 variable "database_scope" {
-  description = "Default Cosmos DB SQL database scope for data-plane role assignments."
+  description = "Default fully-qualified Cosmos DB SQL role assignment scope. Prefer the Cosmos DB account resource ID unless a narrower valid fully-qualified scope is explicitly required."
   type        = string
 }
 

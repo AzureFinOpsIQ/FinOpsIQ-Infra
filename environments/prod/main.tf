@@ -367,7 +367,7 @@ module "cosmosdb_sql_role_assignments" {
   resource_group_name = module.resource_group.name
   account_name        = module.cosmosdb.account_name
   account_id          = module.cosmosdb.account_id
-  database_scope      = "/dbs/${module.cosmosdb.database_name}"
+  database_scope      = module.cosmosdb.account_id
   role_assignments = {
     for key, principal_id in module.managed_identity.principal_ids :
     key => {
