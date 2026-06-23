@@ -1,10 +1,11 @@
-subscription_id     = "e54a7ca3-4b6b-4b0f-889d-2508c85f4f30"
-tenant_id           = "22dc2419-3ab3-4f27-905a-945315d19d95"
-environment         = "prod"
-location            = "eastus2"
-resource_group_name = "rg-finopsiq-prod"
-owner               = "platform"
-helm_namespace      = "finopsiq-prod"
+subscription_id          = "e54a7ca3-4b6b-4b0f-889d-2508c85f4f30"
+tenant_id                = "22dc2419-3ab3-4f27-905a-945315d19d95"
+environment              = "prod"
+location                 = "eastus2"
+resource_group_name      = "rg-finopsiq-prod"
+owner                    = "platform"
+helm_namespace           = "finopsiq-prod"
+platform_admin_object_id = ""
 
 extra_tags = {
   Project    = "FinsOpsIQ"
@@ -15,10 +16,10 @@ network = {
   name          = "vnet-finopsiq-prod"
   address_space = ["10.50.0.0/16"]
   subnets = {
-    aks = {
-      name              = "snet-aks"
-      address_prefixes  = ["10.50.0.0/22"]
-      service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
+    bastion = {
+      name              = "AzureBastionSubnet"
+      address_prefixes  = ["10.50.0.0/26"]
+      service_endpoints = []
     }
     aks_nodes = {
       name                       = "snet-aks-nodes"
@@ -26,6 +27,11 @@ network = {
       service_endpoints          = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
       network_security_group_key = "aks"
       nat_gateway_key            = "aks"
+    }
+    management = {
+      name              = "snet-management"
+      address_prefixes  = ["10.50.12.0/24"]
+      service_endpoints = ["Microsoft.KeyVault", "Microsoft.Storage", "Microsoft.AzureCosmosDB"]
     }
     app_gateway = {
       name                       = "snet-appgw"
@@ -159,6 +165,32 @@ application_gateway = {
   zones                  = []
 }
 
+bastion = {
+  name           = "bas-finopsiq-prod"
+  public_ip_name = "pip-bas-finopsiq-prod"
+  subnet_key     = "bastion"
+  sku            = "Standard"
+  scale_units    = 2
+  zones          = []
+}
+
+management_vm = {
+  name                         = "vm-finopsiq-prod-mgmt"
+  network_interface_name       = "nic-finopsiq-prod-mgmt"
+  network_security_group_name  = "nsg-finopsiq-prod-management"
+  subnet_key                   = "management"
+  vm_size                      = "Standard_B2s"
+  admin_username               = "finopsadmin"
+  admin_password               = "CHANGE_ME_ManagementVmPassword_123!"
+  os_disk_size_gb              = 64
+  os_disk_storage_account_type = "Premium_LRS"
+}
+
+aks_private_dns = {
+  name                      = "privatelink.eastus2.azmk8s.io"
+  virtual_network_link_name = "aks-private-dns-vnet-finopsiq-prod-link"
+}
+
 keyvault = {
   name                          = "kv-finopsiq-prod"
   sku_name                      = "standard"
@@ -267,14 +299,15 @@ workload_service_accounts = {
 }
 
 aks = {
-  name               = "aks-finopsiq-prod"
-  dns_prefix         = "aks-finopsiq-prod"
-  kubernetes_version = "1.34"
-  subnet_key         = "aks_nodes"
-  network_policy     = "azure"
-  service_cidr       = "10.51.0.0/16"
-  dns_service_ip     = "10.51.0.10"
-  azure_rbac_enabled = true
+  name                    = "aks-finopsiq-prod"
+  dns_prefix              = "aks-finopsiq-prod"
+  kubernetes_version      = "1.34"
+  subnet_key              = "aks_nodes"
+  network_policy          = "azure"
+  service_cidr            = "10.51.0.0/16"
+  dns_service_ip          = "10.51.0.10"
+  azure_rbac_enabled      = true
+  private_cluster_enabled = true
   system_node_pool = {
     name                        = "system"
     vm_size                     = "Standard_D2s_v3"

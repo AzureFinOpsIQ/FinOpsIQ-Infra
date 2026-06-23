@@ -4,6 +4,8 @@ resource "azurerm_kubernetes_cluster" "this" {
   location                  = var.location
   dns_prefix                = var.dns_prefix
   kubernetes_version        = var.kubernetes_version
+  private_cluster_enabled   = var.private_cluster_enabled
+  private_dns_zone_id       = var.private_dns_zone_id
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
   tags                      = var.tags
@@ -27,10 +29,11 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   network_profile {
-    network_plugin = "azure"
-    network_policy = var.network_policy
-    service_cidr   = var.service_cidr
-    dns_service_ip = var.dns_service_ip
+    network_plugin      = "azure"
+    network_plugin_mode = var.network_plugin_mode
+    network_policy      = var.network_policy
+    service_cidr        = var.service_cidr
+    dns_service_ip      = var.dns_service_ip
   }
 
   azure_active_directory_role_based_access_control {

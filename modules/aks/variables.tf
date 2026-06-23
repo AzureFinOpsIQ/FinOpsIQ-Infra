@@ -44,6 +44,18 @@ variable "ingress_application_gateway_id" {
   default     = null
 }
 
+variable "private_cluster_enabled" {
+  description = "Enable private AKS API server endpoint."
+  type        = bool
+  default     = false
+}
+
+variable "private_dns_zone_id" {
+  description = "Private DNS zone ID for the private AKS API server."
+  type        = string
+  default     = null
+}
+
 variable "system_node_pool" {
   description = "System node pool configuration."
   type = object({
@@ -76,6 +88,12 @@ variable "user_node_pools" {
 variable "network_policy" {
   description = "AKS network policy."
   type        = string
+}
+
+variable "network_plugin_mode" {
+  description = "AKS network plugin mode."
+  type        = string
+  default     = null
 }
 
 variable "service_cidr" {

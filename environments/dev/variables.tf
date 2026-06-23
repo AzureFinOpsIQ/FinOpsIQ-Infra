@@ -49,6 +49,12 @@ variable "workload_service_accounts" {
   type        = map(string)
 }
 
+variable "platform_admin_object_id" {
+  description = "Microsoft Entra object ID that receives Azure Kubernetes Service RBAC Cluster Admin on AKS. Leave empty to skip assignment until a platform admin is selected."
+  type        = string
+  default     = ""
+}
+
 variable "network" {
   description = "Virtual network configuration."
   type = object({
@@ -144,6 +150,42 @@ variable "application_gateway" {
     waf_rule_set_type      = string
     waf_rule_set_version   = string
     zones                  = optional(list(string), [])
+  })
+}
+
+variable "bastion" {
+  description = "Azure Bastion configuration for private administration."
+  type = object({
+    name           = string
+    public_ip_name = string
+    subnet_key     = string
+    sku            = optional(string, "Standard")
+    scale_units    = optional(number, 2)
+    zones          = optional(list(string), [])
+  })
+}
+
+variable "management_vm" {
+  description = "Private management VM configuration."
+  type = object({
+    name                         = string
+    network_interface_name       = string
+    network_security_group_name  = string
+    subnet_key                   = string
+    vm_size                      = optional(string, "Standard_B2s")
+    admin_username               = string
+    admin_password               = string
+    os_disk_size_gb              = optional(number, 64)
+    os_disk_storage_account_type = optional(string, "Premium_LRS")
+  })
+  sensitive = true
+}
+
+variable "aks_private_dns" {
+  description = "AKS private API DNS zone configuration."
+  type = object({
+    name                      = string
+    virtual_network_link_name = string
   })
 }
 
@@ -248,14 +290,16 @@ variable "managed_identities" {
 variable "aks" {
   description = "AKS configuration."
   type = object({
-    name               = string
-    dns_prefix         = string
-    kubernetes_version = string
-    subnet_key         = string
-    network_policy     = string
-    service_cidr       = string
-    dns_service_ip     = string
-    azure_rbac_enabled = bool
+    name                    = string
+    dns_prefix              = string
+    kubernetes_version      = string
+    subnet_key              = string
+    network_policy          = string
+    network_plugin_mode     = optional(string)
+    service_cidr            = string
+    dns_service_ip          = string
+    azure_rbac_enabled      = bool
+    private_cluster_enabled = optional(bool, true)
     system_node_pool = object({
       name                = string
       vm_size             = string

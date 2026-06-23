@@ -81,6 +81,37 @@ module "acr" {
   tags                = local.common_tags
 }
 
+module "bastion" {
+  source              = "../../modules/bastion"
+  name                = var.bastion.name
+  public_ip_name      = var.bastion.public_ip_name
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  subnet_id           = module.network.subnet_ids[var.bastion.subnet_key]
+  sku                 = var.bastion.sku
+  scale_units         = var.bastion.scale_units
+  zones               = var.bastion.zones
+  tags                = local.common_tags
+}
+
+module "management_vm" {
+  source                        = "../../modules/management-vm"
+  name                          = var.management_vm.name
+  network_interface_name        = var.management_vm.network_interface_name
+  network_security_group_name   = var.management_vm.network_security_group_name
+  resource_group_name           = module.resource_group.name
+  location                      = module.resource_group.location
+  subnet_id                     = module.network.subnet_ids[var.management_vm.subnet_key]
+  bastion_subnet_address_prefix = var.network.subnets[var.bastion.subnet_key].address_prefixes[0]
+  vm_size                       = var.management_vm.vm_size
+  admin_username                = var.management_vm.admin_username
+  admin_password                = var.management_vm.admin_password
+  os_disk_size_gb               = var.management_vm.os_disk_size_gb
+  os_disk_storage_account_type  = var.management_vm.os_disk_storage_account_type
+  custom_data_path              = "${path.module}/../../scripts/bootstrap-management-vm.sh"
+  tags                          = local.common_tags
+}
+
 module "application_gateway" {
   source                 = "../../modules/application-gateway"
   name                   = var.application_gateway.name
@@ -249,6 +280,15 @@ module "managed_identity" {
   tags                = local.common_tags
 }
 
+module "aks_private_dns" {
+  source                    = "../../modules/private-dns"
+  name                      = var.aks_private_dns.name
+  resource_group_name       = module.resource_group.name
+  virtual_network_id        = module.network.vnet_id
+  virtual_network_link_name = var.aks_private_dns.virtual_network_link_name
+  tags                      = local.common_tags
+}
+
 module "aks" {
   source                         = "../../modules/aks"
   name                           = var.aks.name
@@ -260,7 +300,10 @@ module "aks" {
   aks_subnet_id                  = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
   system_node_pool               = var.aks.system_node_pool
   user_node_pools                = var.aks.user_node_pools
+  private_cluster_enabled        = var.aks.private_cluster_enabled
+  private_dns_zone_id            = module.aks_private_dns.private_dns_zone_id
   network_policy                 = var.aks.network_policy
+  network_plugin_mode            = var.aks.network_plugin_mode
   service_cidr                   = var.aks.service_cidr
   dns_service_ip                 = var.aks.dns_service_ip
   azure_rbac_enabled             = var.aks.azure_rbac_enabled
@@ -268,7 +311,7 @@ module "aks" {
   ingress_application_gateway_id = module.application_gateway.id
   tags                           = local.common_tags
 
-  depends_on = [module.network, module.application_gateway]
+  depends_on = [module.network, module.application_gateway, module.aks_private_dns]
 }
 
 module "workload_identity" {
@@ -303,6 +346,13 @@ module "role_assignments" {
         scope                = module.resource_group.id
         role_definition_name = "Reader"
         principal_id         = module.aks.ingress_application_gateway_identity_object_id
+      }
+    },
+    var.platform_admin_object_id == "" ? {} : {
+      aks_platform_admin = {
+        scope                = module.aks.id
+        role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+        principal_id         = var.platform_admin_object_id
       }
     },
     {
@@ -398,6 +448,9 @@ output "helm_values" {
     application_gateway_name       = module.application_gateway.name
     application_gateway_public_ip  = module.application_gateway.public_ip_address
     application_gateway_waf_policy = module.application_gateway.waf_policy_name
+    aks_private_fqdn               = module.aks.aks_private_fqdn
+    bastion_name                   = module.bastion.bastion_name
+    management_vm_private_ip       = module.management_vm.vm_private_ip
     workload_identity_client_ids   = module.managed_identity.client_ids
     workload_identity_subjects     = module.workload_identity.subjects
   }
@@ -411,6 +464,7 @@ output "private_networking" {
     private_endpoint_ids    = module.private_endpoints.private_endpoint_ids
     nat_gateway_ids         = module.network.nat_gateway_ids
     network_security_groups = module.network.network_security_group_ids
+    aks_private_dns_zone_id = module.aks_private_dns.private_dns_zone_id
   }
 }
 
@@ -419,6 +473,8 @@ output "aks" {
   value = {
     name                = module.aks.name
     id                  = module.aks.id
+    aks_id              = module.aks.aks_id
+    aks_private_fqdn    = module.aks.aks_private_fqdn
     oidc_issuer_url     = module.aks.oidc_issuer_url
     node_resource_group = module.aks.node_resource_group
   }
@@ -432,5 +488,21 @@ output "application_gateway" {
     public_ip_address = module.application_gateway.public_ip_address
     public_ip_fqdn    = module.application_gateway.public_ip_fqdn
     waf_policy_name   = module.application_gateway.waf_policy_name
+  }
+}
+
+output "secure_admin" {
+  description = "Private administration path outputs."
+  sensitive   = true
+  value = {
+    bastion_id         = module.bastion.bastion_id
+    bastion_name       = module.bastion.bastion_name
+    bastion_host       = module.bastion.bastion_host
+    management_vm_id   = module.management_vm.vm_id
+    management_vm_name = module.management_vm.vm_name
+    management_vm_ip   = module.management_vm.vm_private_ip
+    aks_private_dns_id = module.aks_private_dns.private_dns_zone_id
+    aks_private_fqdn   = module.aks.aks_private_fqdn
+    management_nsg_id  = module.management_vm.network_security_group_id
   }
 }

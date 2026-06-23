@@ -3,6 +3,11 @@ output "id" {
   value       = azurerm_kubernetes_cluster.this.id
 }
 
+output "aks_id" {
+  description = "AKS cluster resource ID."
+  value       = azurerm_kubernetes_cluster.this.id
+}
+
 output "name" {
   description = "AKS cluster name."
   value       = azurerm_kubernetes_cluster.this.name
@@ -21,6 +26,11 @@ output "kubelet_identity_object_id" {
 output "node_resource_group" {
   description = "AKS node resource group."
   value       = azurerm_kubernetes_cluster.this.node_resource_group
+}
+
+output "aks_private_fqdn" {
+  description = "Private FQDN for the AKS API server."
+  value       = azurerm_kubernetes_cluster.this.private_fqdn
 }
 
 output "user_node_pool_ids" {
