@@ -30,6 +30,9 @@ locals {
     for key, service_account in var.workload_service_accounts :
     key => "system:serviceaccount:${var.helm_namespace}:${service_account}"
   }
+
+  bastion_subnet_id    = try(module.network.subnet_ids[var.bastion.subnet_key], "")
+  management_subnet_id = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
 }
 
 module "resource_group" {
@@ -87,7 +90,7 @@ module "bastion" {
   public_ip_name      = var.bastion.public_ip_name
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
-  subnet_id           = module.network.subnet_ids[var.bastion.subnet_key]
+  subnet_id           = local.bastion_subnet_id
   sku                 = var.bastion.sku
   scale_units         = var.bastion.scale_units
   zones               = var.bastion.zones
@@ -101,7 +104,7 @@ module "management_vm" {
   network_security_group_name   = var.management_vm.network_security_group_name
   resource_group_name           = module.resource_group.name
   location                      = module.resource_group.location
-  subnet_id                     = module.network.subnet_ids[var.management_vm.subnet_key]
+  subnet_id                     = local.management_subnet_id
   bastion_subnet_address_prefix = var.network.subnets[var.bastion.subnet_key].address_prefixes[0]
   vm_size                       = var.management_vm.vm_size
   admin_username                = var.management_vm.admin_username
