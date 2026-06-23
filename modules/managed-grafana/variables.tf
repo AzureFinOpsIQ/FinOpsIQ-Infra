@@ -22,7 +22,7 @@ variable "sku" {
 variable "grafana_major_version" {
   description = "Grafana major version."
   type        = string
-  default     = "11"
+  default     = "12"
 }
 
 variable "api_key_enabled" {

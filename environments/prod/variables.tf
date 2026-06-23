@@ -292,7 +292,7 @@ variable "managed_grafana" {
   type = object({
     name                              = string
     sku                               = optional(string, "Standard")
-    grafana_major_version             = optional(string, "11")
+    grafana_major_version             = optional(string, "12")
     api_key_enabled                   = optional(bool, false)
     deterministic_outbound_ip_enabled = optional(bool, false)
     public_network_access_enabled     = optional(bool, true)
