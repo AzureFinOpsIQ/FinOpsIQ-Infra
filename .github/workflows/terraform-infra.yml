@@ -2,8 +2,6 @@
 name: "Terraform Infrastructure - DEV"
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
   pull_request:
     branches:
       - main
@@ -45,7 +43,6 @@ jobs:
   security_quality:
     name: "Stage 1 - Security and Quality"
     runs-on: ubuntu-latest
-    if: github.event_name != 'schedule'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -113,7 +110,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - security_quality
-    if: github.event_name != 'schedule'
     outputs:
       add_count: ${{ steps.plan_summary.outputs.add_count }}
       modify_count: ${{ steps.plan_summary.outputs.modify_count }}
@@ -403,140 +399,3 @@ jobs:
             }' > slack-payload.json
           curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
 
-  drift_detection:
-    name: "Scheduled Drift Detection - DEV"
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Azure login with OIDC
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Terraform init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: |
-          terraform init -input=false \
-            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
-            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
-            -backend-config="container_name=${TF_STATE_CONTAINER}" \
-            -backend-config="key=${TF_STATE_KEY}" \
-            -backend-config="use_azuread_auth=true"
-
-      - name: Run drift detection plan
-        id: drift
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: |
-          set +e
-          terraform plan -detailed-exitcode -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" -no-color -out=drift.tfplan > drift-plan.txt 2>&1
-          EXIT_CODE=$?
-          set -e
-
-          ADD_COUNT=0
-          MODIFY_COUNT=0
-          DESTROY_COUNT=0
-          if [ "${EXIT_CODE}" = "2" ]; then
-            terraform show -json drift.tfplan > drift.tfplan.json
-            ADD_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("create"))] | length' drift.tfplan.json)
-            MODIFY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("update"))] | length' drift.tfplan.json)
-            DESTROY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' drift.tfplan.json)
-          fi
-
-          {
-            echo "exit_code=${EXIT_CODE}"
-            echo "add_count=${ADD_COUNT}"
-            echo "modify_count=${MODIFY_COUNT}"
-            echo "destroy_count=${DESTROY_COUNT}"
-            echo "summary_text=Add: ${ADD_COUNT}, Modify: ${MODIFY_COUNT}, Destroy: ${DESTROY_COUNT}"
-          } >> "${GITHUB_OUTPUT}"
-
-          {
-            echo "### Terraform DEV Drift Detection"
-            echo ""
-            echo "| Result | Value |"
-            echo "|---|---:|"
-            echo "| Exit code | ${EXIT_CODE} |"
-            echo "| Resources to create | ${ADD_COUNT} |"
-            echo "| Resources to modify | ${MODIFY_COUNT} |"
-            echo "| Resources to destroy | ${DESTROY_COUNT} |"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-          if [ "${EXIT_CODE}" = "1" ]; then
-            exit 1
-          fi
-
-      - name: Upload drift detection artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-dev-drift-detection
-          path: |
-            ${{ env.TF_WORKING_DIR }}/drift-plan.txt
-            ${{ env.TF_WORKING_DIR }}/drift.tfplan.json
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Slack alert - drift detected
-        if: steps.drift.outputs.exit_code == '2'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          DRIFT_SUMMARY: ${{ steps.drift.outputs.summary_text }}
-        run: |
-          jq -n \
-            --arg environment "DEV" \
-            --arg status "DRIFT DETECTED" \
-            --arg repository "${GITHUB_REPOSITORY}" \
-            --arg commit "${GITHUB_SHA}" \
-            --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --arg summary "${DRIFT_SUMMARY}" \
-            '{
-              text: "Terraform drift detected. No automatic correction was applied.",
-              blocks: [
-                {type: "header", text: {type: "plain_text", text: "Terraform Infrastructure - DRIFT DETECTED"}},
-                {type: "section", fields: [
-                  {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
-                  {type: "mrkdwn", text: "*Status:*\n\($status)"},
-                  {type: "mrkdwn", text: "*Repository:*\n\($repository)"},
-                  {type: "mrkdwn", text: "*Commit:*\n\($commit)"},
-                  {type: "mrkdwn", text: "*Plan Summary:*\n\($summary)"},
-                  {type: "mrkdwn", text: "*Workflow URL:*\n\($workflow_url)"}
-                ]}
-              ]
-            }' > slack-payload.json
-          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
-
-      - name: Slack alert - drift detection failed
-        if: failure()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          jq -n \
-            --arg environment "DEV" \
-            --arg status "FAILED" \
-            --arg failed_stage "Scheduled Drift Detection" \
-            --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --arg commit "${GITHUB_SHA}" \
-            '{
-              text: "Terraform drift detection failed.",
-              blocks: [
-                {type: "header", text: {type: "plain_text", text: "Terraform Drift Detection - FAILED"}},
-                {type: "section", fields: [
-                  {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
-                  {type: "mrkdwn", text: "*Status:*\n\($status)"},
-                  {type: "mrkdwn", text: "*Failed Stage:*\n\($failed_stage)"},
-                  {type: "mrkdwn", text: "*Commit SHA:*\n\($commit)"},
-                  {type: "mrkdwn", text: "*Workflow URL:*\n\($workflow_url)"}
-                ]}
-              ]
-            }' > slack-payload.json
-          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"

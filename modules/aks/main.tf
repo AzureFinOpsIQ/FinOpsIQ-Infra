@@ -45,6 +45,15 @@ resource "azurerm_kubernetes_cluster" "this" {
     log_analytics_workspace_id = var.log_analytics_workspace_id
   }
 
+  dynamic "monitor_metrics" {
+    for_each = var.managed_prometheus_enabled ? [1] : []
+
+    content {
+      annotations_allowed = var.monitor_metrics_annotations_allowed
+      labels_allowed      = var.monitor_metrics_labels_allowed
+    }
+  }
+
   dynamic "ingress_application_gateway" {
     for_each = var.ingress_application_gateway_id == null ? [] : [var.ingress_application_gateway_id]
 

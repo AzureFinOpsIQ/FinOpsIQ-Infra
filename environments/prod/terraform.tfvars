@@ -138,6 +138,10 @@ monitor = {
   retention_in_days = 90
 }
 
+azure_monitor_workspace = {
+  name = "amw-finopsiq-prod"
+}
+
 application_insights = {
   name             = "appi-finopsiq-prod"
   application_type = "web"
@@ -282,6 +286,15 @@ openai = {
   }
 }
 
+managed_grafana = {
+  name                              = "grafana-finopsiq-prod"
+  sku                               = "Standard"
+  grafana_major_version             = "11"
+  api_key_enabled                   = false
+  deterministic_outbound_ip_enabled = false
+  public_network_access_enabled     = false
+}
+
 managed_identities = {
   auth         = { name = "id-finopsiq-prod-auth" }
   collection   = { name = "id-finopsiq-prod-collection" }
@@ -299,15 +312,16 @@ workload_service_accounts = {
 }
 
 aks = {
-  name                    = "aks-finopsiq-prod"
-  dns_prefix              = "aks-finopsiq-prod"
-  kubernetes_version      = "1.34"
-  subnet_key              = "aks_nodes"
-  network_policy          = "azure"
-  service_cidr            = "10.51.0.0/16"
-  dns_service_ip          = "10.51.0.10"
-  azure_rbac_enabled      = true
-  private_cluster_enabled = true
+  name                       = "aks-finopsiq-prod"
+  dns_prefix                 = "aks-finopsiq-prod"
+  kubernetes_version         = "1.34"
+  subnet_key                 = "aks_nodes"
+  network_policy             = "azure"
+  service_cidr               = "10.51.0.0/16"
+  dns_service_ip             = "10.51.0.10"
+  azure_rbac_enabled         = true
+  private_cluster_enabled    = true
+  managed_prometheus_enabled = true
   system_node_pool = {
     name                        = "system"
     vm_size                     = "Standard_D2s_v3"

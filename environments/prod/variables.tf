@@ -117,6 +117,13 @@ variable "monitor" {
   })
 }
 
+variable "azure_monitor_workspace" {
+  description = "Azure Monitor Workspace configuration for managed Prometheus."
+  type = object({
+    name = string
+  })
+}
+
 variable "application_insights" {
   description = "Application Insights configuration."
   type = object({
@@ -280,6 +287,18 @@ variable "openai" {
   })
 }
 
+variable "managed_grafana" {
+  description = "Azure Managed Grafana configuration."
+  type = object({
+    name                              = string
+    sku                               = optional(string, "Standard")
+    grafana_major_version             = optional(string, "11")
+    api_key_enabled                   = optional(bool, false)
+    deterministic_outbound_ip_enabled = optional(bool, false)
+    public_network_access_enabled     = optional(bool, true)
+  })
+}
+
 variable "managed_identities" {
   description = "User-assigned managed identities keyed by workload name."
   type = map(object({
@@ -290,16 +309,17 @@ variable "managed_identities" {
 variable "aks" {
   description = "AKS configuration."
   type = object({
-    name                    = string
-    dns_prefix              = string
-    kubernetes_version      = string
-    subnet_key              = string
-    network_policy          = string
-    network_plugin_mode     = optional(string)
-    service_cidr            = string
-    dns_service_ip          = string
-    azure_rbac_enabled      = bool
-    private_cluster_enabled = optional(bool, true)
+    name                       = string
+    dns_prefix                 = string
+    kubernetes_version         = string
+    subnet_key                 = string
+    network_policy             = string
+    network_plugin_mode        = optional(string)
+    service_cidr               = string
+    dns_service_ip             = string
+    azure_rbac_enabled         = bool
+    private_cluster_enabled    = optional(bool, true)
+    managed_prometheus_enabled = optional(bool, true)
     system_node_pool = object({
       name                = string
       vm_size             = string

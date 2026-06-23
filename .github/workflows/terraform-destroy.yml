@@ -1,0 +1,253 @@
+---
+name: "Terraform Destroy - DEV"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: "Type Yes to generate and apply a DEV destroy plan after manual approval."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_WORKING_DIR: environments/dev
+  TF_STATE_KEY: dev/terraform.tfstate
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_STATE_RESOURCE_GROUP: ${{ vars.TF_STATE_RESOURCE_GROUP }}
+  TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+  TF_STATE_CONTAINER: ${{ vars.TF_STATE_CONTAINER }}
+  TF_LOCK_TIMEOUT: 15m
+
+jobs:
+  destroy_plan:
+    name: "Stage 1 - Terraform Destroy Plan"
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_destroy == 'Yes'
+    outputs:
+      destroy_count: ${{ steps.destroy_summary.outputs.destroy_count }}
+      summary_text: ${{ steps.destroy_summary.outputs.summary_text }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TF_STATE_CONTAINER}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform destroy plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -destroy -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" -out=dev-destroy.tfplan
+
+      - name: Generate destroy plan summary
+        id: destroy_summary
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform show -json dev-destroy.tfplan > dev-destroy.tfplan.json
+          DESTROY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' dev-destroy.tfplan.json)
+
+          {
+            echo "### Terraform DEV Destroy Plan Summary"
+            echo ""
+            echo "| Change Type | Count |"
+            echo "|---|---:|"
+            echo "| Resources to destroy | ${DESTROY_COUNT} |"
+          } > destroy-plan-summary.md
+
+          cat destroy-plan-summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+          {
+            echo "destroy_count=${DESTROY_COUNT}"
+            echo "summary_text=Destroy: ${DESTROY_COUNT}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload destroy plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-dev-destroy-plan
+          path: |
+            ${{ env.TF_WORKING_DIR }}/dev-destroy.tfplan
+            ${{ env.TF_WORKING_DIR }}/dev-destroy.tfplan.json
+            ${{ env.TF_WORKING_DIR }}/destroy-plan-summary.md
+          retention-days: 1
+
+      - name: Send Slack destroy-plan notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DESTROY_SUMMARY: ${{ steps.destroy_summary.outputs.summary_text }}
+        run: |
+          jq -n \
+            --arg environment "DEV" \
+            --arg status "DESTROY PLAN READY" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg author "${GITHUB_ACTOR}" \
+            --arg summary "${DESTROY_SUMMARY}" \
+            --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{
+              text: "Terraform destroy plan completed. Awaiting DEV environment approval.",
+              blocks: [
+                {type: "header", text: {type: "plain_text", text: "Terraform Destroy - PLAN READY"}},
+                {type: "section", fields: [
+                  {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
+                  {type: "mrkdwn", text: "*Status:*\n\($status)"},
+                  {type: "mrkdwn", text: "*Repository:*\n\($repository)"},
+                  {type: "mrkdwn", text: "*Commit:*\n\($commit)"},
+                  {type: "mrkdwn", text: "*Author:*\n\($author)"},
+                  {type: "mrkdwn", text: "*Destroy Plan Summary:*\n\($summary)"}
+                ]},
+                {type: "section", text: {type: "mrkdwn", text: "Review the saved destroy plan artifact, then approve the *dev* GitHub Environment deployment gate to destroy DEV infrastructure."}},
+                {type: "actions", elements: [
+                  {type: "button", text: {type: "plain_text", text: "View workflow"}, url: $workflow_url}
+                ]}
+              ]
+            }' > slack-payload.json
+          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
+
+  destroy_apply:
+    name: "Stage 2 - Terraform Destroy Apply - Manual Approval Required"
+    runs-on: ubuntu-latest
+    needs:
+      - destroy_plan
+    if: github.event.inputs.confirm_destroy == 'Yes'
+    environment: dev
+    outputs:
+      deployment_duration_seconds: ${{ steps.destroy_apply.outputs.deployment_duration_seconds }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TF_STATE_CONTAINER}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Download reviewed destroy plan
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-dev-destroy-plan
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: Terraform apply reviewed destroy plan
+        id: destroy_apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          START_TIME=$(date +%s)
+          terraform apply -auto-approve -lock-timeout="${TF_LOCK_TIMEOUT}" dev-destroy.tfplan
+          END_TIME=$(date +%s)
+          echo "deployment_duration_seconds=$((END_TIME - START_TIME))" >> "${GITHUB_OUTPUT}"
+
+  notify_destroy:
+    name: "Stage 3 - Slack Destroy Notification"
+    runs-on: ubuntu-latest
+    needs:
+      - destroy_plan
+      - destroy_apply
+    if: github.event.inputs.confirm_destroy == 'Yes' && always()
+    steps:
+      - name: Send Slack destroy result notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PLAN_RESULT: ${{ needs.destroy_plan.result }}
+          APPLY_RESULT: ${{ needs.destroy_apply.result }}
+          DESTROY_COUNT: ${{ needs.destroy_plan.outputs.destroy_count }}
+          DURATION: ${{ needs.destroy_apply.outputs.deployment_duration_seconds }}
+        run: |
+          STATUS="SUCCESS"
+          MESSAGE="Terraform DEV destroy completed successfully."
+          FAILED_STAGE=""
+
+          if [ "${PLAN_RESULT}" = "failure" ]; then
+            STATUS="FAILED"
+            MESSAGE="Terraform DEV destroy failed."
+            FAILED_STAGE="Destroy Plan"
+          elif [ "${APPLY_RESULT}" = "failure" ]; then
+            STATUS="FAILED"
+            MESSAGE="Terraform DEV destroy failed."
+            FAILED_STAGE="Destroy Apply"
+          elif [ "${APPLY_RESULT}" = "skipped" ]; then
+            STATUS="SKIPPED"
+            MESSAGE="Terraform DEV destroy apply was skipped."
+            FAILED_STAGE="Destroy Apply"
+          fi
+
+          jq -n \
+            --arg environment "DEV" \
+            --arg status "${STATUS}" \
+            --arg message "${MESSAGE}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg failed_stage "${FAILED_STAGE}" \
+            --arg destroyed "${DESTROY_COUNT:-0}" \
+            --arg duration "${DURATION:-0}s" \
+            '{
+              text: $message,
+              blocks: [
+                {type: "header", text: {type: "plain_text", text: ("Terraform Destroy - " + $status)}},
+                {type: "section", fields: [
+                  {type: "mrkdwn", text: "*Environment:*\n\($environment)"},
+                  {type: "mrkdwn", text: "*Status:*\n\($status)"},
+                  {type: "mrkdwn", text: "*Repository:*\n\($repository)"},
+                  {type: "mrkdwn", text: "*Commit:*\n\($commit)"},
+                  {type: "mrkdwn", text: "*Resources Destroyed:*\n\($destroyed)"},
+                  {type: "mrkdwn", text: "*Duration:*\n\($duration)"},
+                  {type: "mrkdwn", text: "*Failed/Skipped Stage:*\n\($failed_stage)"}
+                ]},
+                {type: "actions", elements: [
+                  {type: "button", text: {type: "plain_text", text: "View workflow"}, url: $workflow_url}
+                ]}
+              ]
+            }' > slack-payload.json
+          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"

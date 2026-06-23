@@ -116,6 +116,24 @@ variable "log_analytics_workspace_id" {
   type        = string
 }
 
+variable "managed_prometheus_enabled" {
+  description = "Enable Azure Monitor managed Prometheus metrics collection on AKS."
+  type        = bool
+  default     = false
+}
+
+variable "monitor_metrics_annotations_allowed" {
+  description = "Comma-separated Kubernetes annotation allowlist for managed Prometheus metrics."
+  type        = string
+  default     = null
+}
+
+variable "monitor_metrics_labels_allowed" {
+  description = "Comma-separated Kubernetes label allowlist for managed Prometheus metrics."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Common tags."
   type        = map(string)

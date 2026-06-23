@@ -77,6 +77,14 @@ module "monitor" {
   tags                = local.common_tags
 }
 
+module "azure_monitor_workspace" {
+  source              = "../../modules/azure-monitor-workspace"
+  name                = var.azure_monitor_workspace.name
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  tags                = local.common_tags
+}
+
 module "application_insights" {
   source              = "../../modules/application-insights"
   name                = var.application_insights.name
@@ -247,6 +255,20 @@ module "openai" {
   tags                          = local.common_tags
 }
 
+module "managed_grafana" {
+  source                            = "../../modules/managed-grafana"
+  name                              = var.managed_grafana.name
+  resource_group_name               = module.resource_group.name
+  location                          = module.resource_group.location
+  sku                               = var.managed_grafana.sku
+  grafana_major_version             = var.managed_grafana.grafana_major_version
+  api_key_enabled                   = var.managed_grafana.api_key_enabled
+  deterministic_outbound_ip_enabled = var.managed_grafana.deterministic_outbound_ip_enabled
+  public_network_access_enabled     = var.managed_grafana.public_network_access_enabled
+  azure_monitor_workspace_id        = module.azure_monitor_workspace.id
+  tags                              = local.common_tags
+}
+
 module "private_endpoints" {
   source               = "../../modules/private-endpoints"
   resource_group_name  = module.resource_group.name
@@ -338,6 +360,7 @@ module "aks" {
   dns_service_ip                 = var.aks.dns_service_ip
   azure_rbac_enabled             = var.aks.azure_rbac_enabled
   log_analytics_workspace_id     = module.monitor.id
+  managed_prometheus_enabled     = var.aks.managed_prometheus_enabled
   ingress_application_gateway_id = module.application_gateway.id
   tags                           = local.common_tags
 
@@ -438,6 +461,13 @@ module "role_assignments" {
         principal_id         = principal_id
       }
       if contains(keys(var.workload_service_accounts), key)
+    },
+    {
+      grafana_monitoring_reader = {
+        scope                = module.azure_monitor_workspace.id
+        role_definition_name = "Monitoring Reader"
+        principal_id         = module.managed_grafana.principal_id
+      }
     }
   )
 }
@@ -495,6 +525,17 @@ output "private_networking" {
     nat_gateway_ids         = module.network.nat_gateway_ids
     network_security_groups = module.network.network_security_group_ids
     aks_private_dns_zone_id = module.aks_private_dns.private_dns_zone_id
+  }
+}
+
+output "observability" {
+  description = "Azure-native observability outputs."
+  value = {
+    azure_monitor_workspace_id = module.azure_monitor_workspace.id
+    azure_monitor_workspace    = module.azure_monitor_workspace.name
+    managed_grafana_id         = module.managed_grafana.id
+    managed_grafana_name       = module.managed_grafana.name
+    managed_grafana_endpoint   = module.managed_grafana.endpoint
   }
 }
 
