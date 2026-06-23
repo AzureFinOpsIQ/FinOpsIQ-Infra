@@ -172,7 +172,7 @@ variable "management_vm" {
     network_interface_name       = string
     network_security_group_name  = string
     subnet_key                   = string
-    vm_size                      = optional(string, "Standard_B2s")
+    vm_size                      = optional(string, "Standard_D2s_v3")
     admin_username               = string
     admin_password               = string
     os_disk_size_gb              = optional(number, 64)

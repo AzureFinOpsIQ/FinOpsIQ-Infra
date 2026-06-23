@@ -179,9 +179,9 @@ management_vm = {
   network_interface_name       = "nic-finopsiq-dev-mgmt"
   network_security_group_name  = "nsg-finopsiq-dev-management"
   subnet_key                   = "management"
-  vm_size                      = "Standard_B2s"
+  vm_size                      = "Standard_D2s_v3"
   admin_username               = "finopsadmin"
-  admin_password               = "FinOpsIQ@2026"
+  admin_password               = "CHANGE_ME_ManagementVmPassword_123!"
   os_disk_size_gb              = 64
   os_disk_storage_account_type = "StandardSSD_LRS"
 }

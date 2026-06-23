@@ -304,7 +304,7 @@ module "aks" {
   system_node_pool               = var.aks.system_node_pool
   user_node_pools                = var.aks.user_node_pools
   private_cluster_enabled        = var.aks.private_cluster_enabled
-  private_dns_zone_id            = module.aks_private_dns.private_dns_zone_id
+  private_dns_zone_id            = var.aks.private_cluster_enabled ? "System" : null
   network_policy                 = var.aks.network_policy
   network_plugin_mode            = var.aks.network_plugin_mode
   service_cidr                   = var.aks.service_cidr
@@ -314,7 +314,7 @@ module "aks" {
   ingress_application_gateway_id = module.application_gateway.id
   tags                           = local.common_tags
 
-  depends_on = [module.network, module.application_gateway, module.aks_private_dns]
+  depends_on = [module.network, module.application_gateway]
 }
 
 module "workload_identity" {
