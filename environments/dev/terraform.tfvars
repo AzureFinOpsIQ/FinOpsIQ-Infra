@@ -183,7 +183,7 @@ management_vm = {
   admin_username               = "finopsadmin"
   admin_password               = "FinOpsIQ@2026"
   os_disk_size_gb              = 64
-  os_disk_storage_account_type = "Premium_LRS"
+  os_disk_storage_account_type = "StandardSSD_LRS"
 }
 
 aks_private_dns = {
