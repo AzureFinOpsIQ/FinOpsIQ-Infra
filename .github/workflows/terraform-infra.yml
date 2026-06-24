@@ -156,22 +156,20 @@ jobs:
         id: plan_summary
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform show -json dev.tfplan > dev.tfplan.json
-          ADD_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("create"))] | length' dev.tfplan.json)
-          MODIFY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("update"))] | length' dev.tfplan.json)
-          DESTROY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' dev.tfplan.json)
+          PLAN_JSON="$(terraform show -json dev.tfplan)"
+          ADD_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("create"))] | length' <<< "${PLAN_JSON}")
+          MODIFY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("update"))] | length' <<< "${PLAN_JSON}")
+          DESTROY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' <<< "${PLAN_JSON}")
 
           {
-            echo "### Terraform DEV Plan Summary"
+            echo "Terraform DEV Plan Summary"
             echo ""
-            echo "| Change Type | Count |"
-            echo "|---|---:|"
-            echo "| Resources to add | ${ADD_COUNT} |"
-            echo "| Resources to modify | ${MODIFY_COUNT} |"
-            echo "| Resources to destroy | ${DESTROY_COUNT} |"
-          } > plan-summary.md
+            echo "Resources to add: ${ADD_COUNT}"
+            echo "Resources to modify: ${MODIFY_COUNT}"
+            echo "Resources to destroy: ${DESTROY_COUNT}"
+          } > plan-summary.txt
 
-          cat plan-summary.md >> "${GITHUB_STEP_SUMMARY}"
+          cat plan-summary.txt >> "${GITHUB_STEP_SUMMARY}"
 
           {
             echo "add_count=${ADD_COUNT}"
@@ -200,8 +198,7 @@ jobs:
           name: terraform-dev-plan
           path: |
             ${{ env.TF_WORKING_DIR }}/dev.tfplan
-            ${{ env.TF_WORKING_DIR }}/dev.tfplan.json
-            ${{ env.TF_WORKING_DIR }}/plan-summary.md
+            ${{ env.TF_WORKING_DIR }}/plan-summary.txt
           retention-days: 1
 
       - name: Send Slack plan-ready notification
@@ -210,7 +207,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           PLAN_SUMMARY: ${{ steps.plan_summary.outputs.summary_text }}
         run: |
-          jq -n \
+          curl -fsS -X POST -H "Content-Type: application/json" --data "$(jq -n \
             --arg environment "DEV" \
             --arg status "PLAN READY" \
             --arg repository "${GITHUB_REPOSITORY}" \
@@ -236,8 +233,7 @@ jobs:
                   {type: "button", text: {type: "plain_text", text: "View workflow"}, url: $workflow_url}
                 ]}
               ]
-            }' > slack-payload.json
-          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
+            }')" "${SLACK_WEBHOOK_URL}"
 
   terraform_apply:
     name: "Stage 3 - Terraform Apply - Manual Approval Required"
@@ -294,17 +290,17 @@ jobs:
         id: post_apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform output -json > terraform-outputs.json
+          terraform output > terraform-outputs.txt
           terraform state list > terraform-state-list.txt
           STATE_COUNT=$(wc -l < terraform-state-list.txt | tr -d ' ')
-          jq -r 'to_entries[] | "- \(.key): sensitive=\(.value.sensitive)"' terraform-outputs.json > outputs-summary.md
+          terraform output -json | jq -r 'to_entries[] | "- \(.key): sensitive=\(.value.sensitive)"' > outputs-summary.txt
 
           {
-            echo "### Terraform DEV Outputs Summary"
+            echo "Terraform DEV Outputs Summary"
             echo ""
-            cat outputs-summary.md
+            cat outputs-summary.txt
             echo ""
-            echo "### Terraform State Resource Count"
+            echo "Terraform State Resource Count"
             echo ""
             echo "${STATE_COUNT}"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -316,7 +312,8 @@ jobs:
         with:
           name: terraform-dev-post-apply
           path: |
-            ${{ env.TF_WORKING_DIR }}/outputs-summary.md
+            ${{ env.TF_WORKING_DIR }}/outputs-summary.txt
+            ${{ env.TF_WORKING_DIR }}/terraform-outputs.txt
             ${{ env.TF_WORKING_DIR }}/terraform-state-list.txt
           retention-days: 14
 
@@ -363,7 +360,7 @@ jobs:
             FAILED_STAGE="Terraform Apply"
           fi
 
-          jq -n \
+          curl -fsS -X POST -H "Content-Type: application/json" --data "$(jq -n \
             --arg environment "DEV" \
             --arg status "${STATUS}" \
             --arg message "${MESSAGE}" \
@@ -396,6 +393,5 @@ jobs:
                   {type: "button", text: {type: "plain_text", text: "View workflow"}, url: $workflow_url}
                 ]}
               ]
-            }' > slack-payload.json
-          curl -fsS -X POST -H "Content-Type: application/json" --data @slack-payload.json "${SLACK_WEBHOOK_URL}"
+            }')" "${SLACK_WEBHOOK_URL}"
 
