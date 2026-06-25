@@ -44,6 +44,39 @@ locals {
 
   bastion_subnet_id    = try(module.network.subnet_ids[var.bastion.subnet_key], "")
   management_subnet_id = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
+
+  app_config_values = merge(
+    {
+      AZURE_TENANT_ID                       = var.tenant_id
+      STORAGE_PROVIDER                      = "cosmos"
+      STORAGE_DATA_DIR                      = "/tmp/finopsiq/storage"
+      DATA_RAW_DIR                          = "/tmp/finopsiq/raw"
+      DATA_PROCESSED_DIR                    = "/tmp/finopsiq/processed"
+      DATA_EMBEDDINGS_DIR                   = "/tmp/finopsiq/embeddings"
+      COSMOS_ENDPOINT                       = module.cosmosdb.endpoint
+      COSMOS_DATABASE                       = module.cosmosdb.database_name
+      SERVICE_BUS_NAMESPACE                 = "${module.servicebus.namespace_name}.servicebus.windows.net"
+      SERVICE_BUS_TOPIC                     = module.servicebus.topic_name
+      EVENT_PROVIDER                        = "service_bus"
+      AZURE_STORAGE_ACCOUNT_URL             = module.storage.primary_blob_endpoint
+      AZURE_STORAGE_CONTAINER               = module.storage.container_name
+      APPLICATIONINSIGHTS_CONNECTION_STRING = module.application_insights.connection_string
+      KEY_VAULT_URL                         = "https://${module.keyvault.name}.vault.azure.net/"
+      USE_MANAGED_IDENTITY                  = "true"
+      AUTH_SERVICE_URL                      = "http://auth-service:8000"
+      COLLECTION_SERVICE_URL                = "http://collection-service:8000"
+      PROCESSING_SERVICE_URL                = "http://processing-service:8000"
+      AI_SERVICE_URL                        = "http://ai-service:8000"
+      NOTIFICATION_SERVICE_URL              = "http://notification-service:8000"
+      AZURE_OPENAI_ENDPOINT                 = module.openai.endpoint
+      AZURE_OPENAI_DEPLOYMENT_NAME          = module.openai.deployment_names["chat"]
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT     = module.openai.deployment_names["embeddings"]
+      AZURE_SEARCH_ENDPOINT                 = module.ai_search.endpoint
+      AZURE_SEARCH_INDEX_NAME               = "finops-knowledge"
+      AZURE_SEARCH_SEMANTIC_CONFIG          = "finops-semantic"
+    },
+    var.app_config_secrets
+  )
 }
 
 resource "random_password" "management_vm_admin" {
@@ -141,24 +174,27 @@ module "management_vm" {
 }
 
 module "application_gateway" {
-  source                 = "../../modules/application-gateway"
-  name                   = var.application_gateway.name
-  public_ip_name         = var.application_gateway.public_ip_name
-  waf_policy_name        = var.application_gateway.waf_policy_name
-  resource_group_name    = module.resource_group.name
-  location               = module.resource_group.location
-  subnet_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.application_gateway.subnet_key].name}"
-  sku_name               = var.application_gateway.sku_name
-  sku_tier               = var.application_gateway.sku_tier
-  autoscale_min_capacity = var.application_gateway.autoscale_min_capacity
-  autoscale_max_capacity = var.application_gateway.autoscale_max_capacity
-  frontend_port          = var.application_gateway.frontend_port
-  waf_enabled            = var.application_gateway.waf_enabled
-  waf_firewall_mode      = var.application_gateway.waf_firewall_mode
-  waf_rule_set_type      = var.application_gateway.waf_rule_set_type
-  waf_rule_set_version   = var.application_gateway.waf_rule_set_version
-  zones                  = var.application_gateway.zones
-  tags                   = local.common_tags
+  source                   = "../../modules/application-gateway"
+  name                     = var.application_gateway.name
+  public_ip_name           = var.application_gateway.public_ip_name
+  public_frontend_enabled  = var.application_gateway.public_frontend_enabled
+  private_frontend_enabled = var.application_gateway.private_frontend_enabled
+  private_ip_address       = var.application_gateway.private_ip_address
+  waf_policy_name          = var.application_gateway.waf_policy_name
+  resource_group_name      = module.resource_group.name
+  location                 = module.resource_group.location
+  subnet_id                = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.application_gateway.subnet_key].name}"
+  sku_name                 = var.application_gateway.sku_name
+  sku_tier                 = var.application_gateway.sku_tier
+  autoscale_min_capacity   = var.application_gateway.autoscale_min_capacity
+  autoscale_max_capacity   = var.application_gateway.autoscale_max_capacity
+  frontend_port            = var.application_gateway.frontend_port
+  waf_enabled              = var.application_gateway.waf_enabled
+  waf_firewall_mode        = var.application_gateway.waf_firewall_mode
+  waf_rule_set_type        = var.application_gateway.waf_rule_set_type
+  waf_rule_set_version     = var.application_gateway.waf_rule_set_version
+  zones                    = var.application_gateway.zones
+  tags                     = local.common_tags
 
   depends_on = [module.network]
 }
@@ -186,6 +222,17 @@ resource "azurerm_role_assignment" "terraform_keyvault_secrets_officer" {
 resource "azurerm_key_vault_secret" "management_vm_admin_password" {
   name         = var.management_vm.admin_password_secret_name
   value        = random_password.management_vm_admin.result
+  key_vault_id = module.keyvault.id
+  tags         = local.common_tags
+
+  depends_on = [azurerm_role_assignment.terraform_keyvault_secrets_officer]
+}
+
+resource "azurerm_key_vault_secret" "app_config" {
+  for_each = toset(nonsensitive(keys(local.app_config_values)))
+
+  name         = replace(each.value, "_", "-")
+  value        = local.app_config_values[each.value]
   key_vault_id = module.keyvault.id
   tags         = local.common_tags
 
@@ -302,13 +349,6 @@ module "private_endpoints" {
       subresource_name                = "vault"
       private_dns_zone_key            = "vault"
     }
-    acr = {
-      name                            = var.private_endpoints.endpoint_names.acr
-      private_service_connection_name = "${var.environment}-acr"
-      resource_id                     = module.acr.id
-      subresource_name                = "registry"
-      private_dns_zone_key            = "acr"
-    }
     search = {
       name                            = var.private_endpoints.endpoint_names.search
       private_service_connection_name = "${var.environment}-search"
@@ -347,27 +387,28 @@ module "aks_private_dns" {
 }
 
 module "aks" {
-  source                         = "../../modules/aks"
-  name                           = var.aks.name
-  resource_group_name            = module.resource_group.name
-  location                       = module.resource_group.location
-  dns_prefix                     = var.aks.dns_prefix
-  kubernetes_version             = var.aks.kubernetes_version
-  tenant_id                      = var.tenant_id
-  aks_subnet_id                  = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
-  system_node_pool               = var.aks.system_node_pool
-  user_node_pools                = var.aks.user_node_pools
-  private_cluster_enabled        = var.aks.private_cluster_enabled
-  private_dns_zone_id            = var.aks.private_cluster_enabled ? "System" : null
-  network_policy                 = var.aks.network_policy
-  network_plugin_mode            = var.aks.network_plugin_mode
-  service_cidr                   = var.aks.service_cidr
-  dns_service_ip                 = var.aks.dns_service_ip
-  azure_rbac_enabled             = var.aks.azure_rbac_enabled
-  log_analytics_workspace_id     = module.monitor.id
-  managed_prometheus_enabled     = var.aks.managed_prometheus_enabled
-  ingress_application_gateway_id = module.application_gateway.id
-  tags                           = local.common_tags
+  source                             = "../../modules/aks"
+  name                               = var.aks.name
+  resource_group_name                = module.resource_group.name
+  location                           = module.resource_group.location
+  dns_prefix                         = var.aks.dns_prefix
+  kubernetes_version                 = var.aks.kubernetes_version
+  tenant_id                          = var.tenant_id
+  aks_subnet_id                      = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
+  system_node_pool                   = var.aks.system_node_pool
+  user_node_pools                    = var.aks.user_node_pools
+  private_cluster_enabled            = var.aks.private_cluster_enabled
+  private_dns_zone_id                = var.aks.private_cluster_enabled ? "System" : null
+  network_policy                     = var.aks.network_policy
+  network_plugin_mode                = var.aks.network_plugin_mode
+  service_cidr                       = var.aks.service_cidr
+  dns_service_ip                     = var.aks.dns_service_ip
+  azure_rbac_enabled                 = var.aks.azure_rbac_enabled
+  log_analytics_workspace_id         = module.monitor.id
+  managed_prometheus_enabled         = var.aks.managed_prometheus_enabled
+  key_vault_secrets_provider_enabled = var.aks.key_vault_secrets_provider_enabled
+  ingress_application_gateway_id     = module.application_gateway.id
+  tags                               = local.common_tags
 
   depends_on = [module.network, module.application_gateway]
 }
@@ -405,6 +446,21 @@ module "role_assignments" {
         role_definition_name = "Reader"
         principal_id         = module.aks.ingress_application_gateway_identity_object_id
       }
+      management_vm_aks_cluster_admin = {
+        scope                = module.aks.id
+        role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+        principal_id         = module.management_vm.vm_principal_id
+      }
+      management_vm_keyvault_secrets_user = {
+        scope                = module.keyvault.id
+        role_definition_name = "Key Vault Secrets User"
+        principal_id         = module.management_vm.vm_principal_id
+      }
+      management_vm_keyvault_reader = {
+        scope                = module.keyvault.id
+        role_definition_name = "Reader"
+        principal_id         = module.management_vm.vm_principal_id
+      }
     },
     var.platform_admin_object_id == "" ? {} : {
       aks_platform_admin = {
@@ -429,7 +485,7 @@ module "role_assignments" {
         role_definition_name = "Storage Blob Data Contributor"
         principal_id         = principal_id
       }
-      if contains(keys(var.workload_service_accounts), key)
+      if contains(["collection", "processing", "ai"], key)
     },
     {
       for key, principal_id in module.managed_identity.principal_ids :
@@ -456,7 +512,7 @@ module "role_assignments" {
         role_definition_name = "Search Index Data Contributor"
         principal_id         = principal_id
       }
-      if contains(keys(var.workload_service_accounts), key)
+      if contains(["ai"], key)
     },
     {
       for key, principal_id in module.managed_identity.principal_ids :
@@ -465,7 +521,7 @@ module "role_assignments" {
         role_definition_name = "Cognitive Services OpenAI User"
         principal_id         = principal_id
       }
-      if contains(keys(var.workload_service_accounts), key)
+      if contains(["ai"], key)
     },
     {
       grafana_monitoring_reader = {
@@ -488,7 +544,7 @@ module "cosmosdb_sql_role_assignments" {
     key => {
       principal_id = principal_id
     }
-    if contains(keys(var.workload_service_accounts), key)
+    if contains(["auth", "collection", "processing", "ai", "notification"], key)
   }
 }
 

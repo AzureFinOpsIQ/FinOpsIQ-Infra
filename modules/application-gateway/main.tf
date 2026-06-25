@@ -1,4 +1,5 @@
 resource "azurerm_public_ip" "this" {
+  count               = var.public_frontend_enabled ? 1 : 0
   name                = var.public_ip_name
   resource_group_name = var.resource_group_name
   location            = var.location
@@ -54,9 +55,24 @@ resource "azurerm_application_gateway" "this" {
     subnet_id = var.subnet_id
   }
 
-  frontend_ip_configuration {
-    name                 = "public-frontend-ip"
-    public_ip_address_id = azurerm_public_ip.this.id
+  dynamic "frontend_ip_configuration" {
+    for_each = var.public_frontend_enabled ? [1] : []
+
+    content {
+      name                 = "public-frontend-ip"
+      public_ip_address_id = azurerm_public_ip.this[0].id
+    }
+  }
+
+  dynamic "frontend_ip_configuration" {
+    for_each = var.private_frontend_enabled ? [1] : []
+
+    content {
+      name                          = "private-frontend-ip"
+      subnet_id                     = var.subnet_id
+      private_ip_address_allocation = var.private_ip_address == null ? "Dynamic" : "Static"
+      private_ip_address            = var.private_ip_address
+    }
   }
 
   frontend_port {
@@ -78,7 +94,7 @@ resource "azurerm_application_gateway" "this" {
 
   http_listener {
     name                           = "http-listener"
-    frontend_ip_configuration_name = "public-frontend-ip"
+    frontend_ip_configuration_name = var.private_frontend_enabled ? "private-frontend-ip" : "public-frontend-ip"
     frontend_port_name             = "http"
     protocol                       = "Http"
   }

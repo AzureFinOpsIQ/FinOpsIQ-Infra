@@ -62,7 +62,7 @@ network = {
           protocol                   = "Tcp"
           source_port_range          = "*"
           destination_port_range     = "80"
-          source_address_prefix      = "Internet"
+          source_address_prefix      = "VirtualNetwork"
           destination_address_prefix = "*"
         },
         {
@@ -73,7 +73,7 @@ network = {
           protocol                   = "Tcp"
           source_port_range          = "*"
           destination_port_range     = "443"
-          source_address_prefix      = "Internet"
+          source_address_prefix      = "VirtualNetwork"
           destination_address_prefix = "*"
         },
         {
@@ -153,20 +153,22 @@ acr = {
 }
 
 application_gateway = {
-  name                   = "agw-finopsiq-dev"
-  public_ip_name         = "pip-agw-finopsiq-dev"
-  waf_policy_name        = "waf-finopsiq-dev"
-  subnet_key             = "app_gateway"
-  sku_name               = "WAF_v2"
-  sku_tier               = "WAF_v2"
-  autoscale_min_capacity = 1
-  autoscale_max_capacity = 2
-  frontend_port          = 80
-  waf_enabled            = true
-  waf_firewall_mode      = "Prevention"
-  waf_rule_set_type      = "OWASP"
-  waf_rule_set_version   = "3.2"
-  zones                  = []
+  name                     = "agw-finopsiq-dev"
+  public_ip_name           = "pip-agw-finopsiq-dev"
+  public_frontend_enabled  = true
+  private_frontend_enabled = false
+  waf_policy_name          = "waf-finopsiq-dev"
+  subnet_key               = "app_gateway"
+  sku_name                 = "WAF_v2"
+  sku_tier                 = "WAF_v2"
+  autoscale_min_capacity   = 1
+  autoscale_max_capacity   = 2
+  frontend_port            = 80
+  waf_enabled              = true
+  waf_firewall_mode        = "Prevention"
+  waf_rule_set_type        = "OWASP"
+  waf_rule_set_version     = "3.2"
+  zones                    = []
 }
 
 bastion = {
@@ -201,7 +203,7 @@ keyvault = {
   enable_rbac_authorization     = true
   purge_protection_enabled      = true
   soft_delete_retention_days    = 30
-  public_network_access_enabled = true
+  public_network_access_enabled = false
 }
 
 cosmosdb = {
@@ -209,7 +211,7 @@ cosmosdb = {
   database_name                 = "finopsiq"
   consistency_level             = "Session"
   database_throughput           = null
-  public_network_access_enabled = true
+  public_network_access_enabled = false
   local_authentication_disabled = true
   free_tier_enabled             = false
   containers = {
@@ -247,7 +249,7 @@ storage = {
   container_name                = "finops-raw"
   account_tier                  = "Standard"
   account_replication_type      = "LRS"
-  public_network_access_enabled = true
+  public_network_access_enabled = false
 }
 
 ai_search = {
@@ -256,7 +258,7 @@ ai_search = {
   sku                           = "standard"
   replica_count                 = 1
   partition_count               = 1
-  public_network_access_enabled = true
+  public_network_access_enabled = false
   local_authentication_enabled  = false
 }
 
@@ -264,7 +266,7 @@ openai = {
   name                          = "oai-finopsiq-dev"
   sku_name                      = "S0"
   custom_subdomain_name         = "oai-finopsiq-dev"
-  public_network_access_enabled = true
+  public_network_access_enabled = false
   local_auth_enabled            = false
   deployments = {
     chat = {
@@ -296,6 +298,8 @@ managed_grafana = {
 }
 
 managed_identities = {
+  frontend     = { name = "id-finopsiq-dev-frontend" }
+  apiGateway   = { name = "id-finopsiq-dev-api-gateway" }
   auth         = { name = "id-finopsiq-dev-auth" }
   collection   = { name = "id-finopsiq-dev-collection" }
   processing   = { name = "id-finopsiq-dev-processing" }
@@ -304,6 +308,8 @@ managed_identities = {
 }
 
 workload_service_accounts = {
+  frontend     = "frontend"
+  apiGateway   = "api-gateway"
   auth         = "auth-service"
   collection   = "collection-service"
   processing   = "processing-service"
@@ -312,16 +318,17 @@ workload_service_accounts = {
 }
 
 aks = {
-  name                       = "aks-finopsiq-dev"
-  dns_prefix                 = "aks-finopsiq-dev"
-  kubernetes_version         = "1.34"
-  subnet_key                 = "aks_nodes"
-  network_policy             = "azure"
-  service_cidr               = "10.41.0.0/16"
-  dns_service_ip             = "10.41.0.10"
-  azure_rbac_enabled         = true
-  private_cluster_enabled    = true
-  managed_prometheus_enabled = true
+  name                               = "aks-finopsiq-dev"
+  dns_prefix                         = "aks-finopsiq-dev"
+  kubernetes_version                 = "1.34"
+  subnet_key                         = "aks_nodes"
+  network_policy                     = "azure"
+  service_cidr                       = "10.41.0.0/16"
+  dns_service_ip                     = "10.41.0.10"
+  azure_rbac_enabled                 = true
+  private_cluster_enabled            = true
+  managed_prometheus_enabled         = true
+  key_vault_secrets_provider_enabled = true
   system_node_pool = {
     name                        = "system"
     vm_size                     = "Standard_D2s_v3"

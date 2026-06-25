@@ -122,6 +122,24 @@ variable "managed_prometheus_enabled" {
   default     = false
 }
 
+variable "key_vault_secrets_provider_enabled" {
+  description = "Enable the AKS Azure Key Vault Secrets Provider CSI driver add-on."
+  type        = bool
+  default     = true
+}
+
+variable "key_vault_secret_rotation_enabled" {
+  description = "Enable automatic secret rotation for the Azure Key Vault Secrets Provider add-on."
+  type        = bool
+  default     = true
+}
+
+variable "key_vault_secret_rotation_interval" {
+  description = "Secret rotation interval for the Azure Key Vault Secrets Provider add-on."
+  type        = string
+  default     = "2m"
+}
+
 variable "monitor_metrics_annotations_allowed" {
   description = "Comma-separated Kubernetes annotation allowlist for managed Prometheus metrics."
   type        = string

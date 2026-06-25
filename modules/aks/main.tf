@@ -54,6 +54,15 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
+  dynamic "key_vault_secrets_provider" {
+    for_each = var.key_vault_secrets_provider_enabled ? [1] : []
+
+    content {
+      secret_rotation_enabled  = var.key_vault_secret_rotation_enabled
+      secret_rotation_interval = var.key_vault_secret_rotation_interval
+    }
+  }
+
   dynamic "ingress_application_gateway" {
     for_each = var.ingress_application_gateway_id == null ? [] : [var.ingress_application_gateway_id]
 

@@ -8,6 +8,24 @@ variable "public_ip_name" {
   type        = string
 }
 
+variable "public_frontend_enabled" {
+  description = "Create a public frontend IP configuration for Application Gateway."
+  type        = bool
+  default     = true
+}
+
+variable "private_frontend_enabled" {
+  description = "Create a private frontend IP configuration for Application Gateway."
+  type        = bool
+  default     = false
+}
+
+variable "private_ip_address" {
+  description = "Optional static private frontend IP address. Leave null for dynamic allocation."
+  type        = string
+  default     = null
+}
+
 variable "waf_policy_name" {
   description = "Web Application Firewall policy name."
   type        = string
@@ -49,7 +67,7 @@ variable "autoscale_max_capacity" {
 }
 
 variable "frontend_port" {
-  description = "Public frontend listener port."
+  description = "Frontend listener port."
   type        = number
 }
 
