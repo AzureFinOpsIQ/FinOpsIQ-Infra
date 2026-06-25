@@ -8,6 +8,14 @@ on:
         description: "Type Yes to generate and apply a DEV destroy plan after manual approval."
         required: true
         type: string
+      destroy_mode:
+        description: "Select whether to destroy only short-lived compute/network resources or the full stack."
+        required: true
+        type: choice
+        default: compute-only
+        options:
+          - compute-only
+          - full
 
 permissions:
   contents: read
@@ -38,6 +46,7 @@ jobs:
     if: github.event.inputs.confirm_destroy == 'Yes'
     outputs:
       destroy_count: ${{ steps.destroy_summary.outputs.destroy_count }}
+      destroy_mode: ${{ steps.destroy_summary.outputs.destroy_mode }}
       summary_text: ${{ steps.destroy_summary.outputs.summary_text }}
     steps:
       - name: Checkout repository
@@ -69,30 +78,150 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
+      - name: Build destroy target arguments
+        id: destroy_targets
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          DESTROY_MODE: ${{ github.event.inputs.destroy_mode }}
+        run: |
+          echo "Selected destroy mode: ${DESTROY_MODE}"
+
+          {
+            echo "### Terraform DEV Destroy Mode"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| Selected destroy mode | ${DESTROY_MODE} |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${DESTROY_MODE}" = "full" ]; then
+            echo "target_args=" >> "${GITHUB_OUTPUT}"
+            {
+              echo "Full destroy selected. Terraform will plan destruction for every resource in this state."
+              echo ""
+              echo "Preserved resources: none."
+            } | tee destroy-selection-summary.txt
+            exit 0
+          fi
+
+          TARGETS=(
+            "module.aks"
+            "module.aks_private_dns"
+            "module.application_gateway"
+            "module.bastion"
+            "module.management_vm"
+            "module.network"
+            "module.private_endpoints"
+            "module.workload_identity"
+            "module.role_assignments.azurerm_role_assignment.this[\"acr_pull_kubelet\"]"
+            "module.role_assignments.azurerm_role_assignment.this[\"agic_appgw_contributor\"]"
+            "module.role_assignments.azurerm_role_assignment.this[\"agic_resource_group_reader\"]"
+            "module.role_assignments.azurerm_role_assignment.this[\"management_vm_aks_cluster_admin\"]"
+            "module.role_assignments.azurerm_role_assignment.this[\"management_vm_keyvault_reader\"]"
+            "module.role_assignments.azurerm_role_assignment.this[\"management_vm_keyvault_secrets_user\"]"
+          )
+
+          TARGET_ARGS=""
+          for target in "${TARGETS[@]}"; do
+            TARGET_ARGS="${TARGET_ARGS} -target=${target}"
+          done
+
+          {
+            echo "Compute-only destroy selected."
+            echo ""
+            echo "Resources/modules targeted for destroy:"
+            printf -- "- %s\n" "${TARGETS[@]}"
+            echo ""
+            echo "Resources intentionally preserved:"
+            echo "- Azure Container Registry and images"
+            echo "- Key Vault and secrets"
+            echo "- User Assigned Managed Identities"
+            echo "- Managed identity data-plane role assignments"
+            echo "- Log Analytics Workspace"
+            echo "- Application Insights"
+            echo "- Azure Monitor Workspace"
+            echo "- Managed Grafana"
+            echo "- Cosmos DB and data"
+            echo "- Storage Account and containers"
+            echo "- Service Bus namespace, topic, and subscriptions"
+            echo "- Azure OpenAI"
+            echo "- Azure AI Search"
+            echo "- Terraform backend storage account"
+            echo "- Resource Group"
+          } | tee destroy-selection-summary.txt
+
+          {
+            echo "target_args=${TARGET_ARGS}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Terraform destroy plan
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform plan -destroy -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" -out=dev-destroy.tfplan
+        env:
+          TARGET_ARGS: ${{ steps.destroy_targets.outputs.target_args }}
+        run: |
+          # shellcheck disable=SC2086
+          terraform plan -destroy -input=false -lock-timeout="${TF_LOCK_TIMEOUT}" ${TARGET_ARGS} -out=dev-destroy.tfplan
 
       - name: Generate destroy plan summary
         id: destroy_summary
         working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          DESTROY_MODE: ${{ github.event.inputs.destroy_mode }}
         run: |
           terraform show -json dev-destroy.tfplan > dev-destroy.tfplan.json
           DESTROY_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' dev-destroy.tfplan.json)
+          jq -r '.resource_changes[]? | select(.change.actions | index("delete")) | "- `" + .address + "`"' dev-destroy.tfplan.json > destroy-resources.txt
+
+          if [ ! -s destroy-resources.txt ]; then
+            echo "- No resources scheduled for destruction." > destroy-resources.txt
+          fi
 
           {
             echo "### Terraform DEV Destroy Plan Summary"
             echo ""
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| Selected destroy mode | ${DESTROY_MODE} |"
+            echo ""
             echo "| Change Type | Count |"
             echo "|---|---:|"
             echo "| Resources to destroy | ${DESTROY_COUNT} |"
+            echo ""
+            echo "#### Resources that will be destroyed"
+            cat destroy-resources.txt
+            echo ""
+            echo "#### Resources that will be preserved"
+            if [ "${DESTROY_MODE}" = "full" ]; then
+              echo "- None. Full destroy mode removes all resources managed by this state."
+            else
+              echo "- Azure Container Registry and images"
+              echo "- Key Vault and secrets"
+              echo "- User Assigned Managed Identities"
+              echo "- Managed identity data-plane role assignments"
+              echo "- Log Analytics Workspace"
+              echo "- Application Insights"
+              echo "- Azure Monitor Workspace"
+              echo "- Managed Grafana"
+              echo "- Cosmos DB and data"
+              echo "- Storage Account and containers"
+              echo "- Service Bus namespace, topic, and subscriptions"
+              echo "- Azure OpenAI"
+              echo "- Azure AI Search"
+              echo "- Terraform backend storage account"
+              echo "- Resource Group"
+            fi
+            echo ""
+            echo "#### Confirmation before apply"
+            echo "Review this summary and the uploaded plan artifact before approving the DEV environment gate."
           } > destroy-plan-summary.md
 
           cat destroy-plan-summary.md >> "${GITHUB_STEP_SUMMARY}"
 
           {
             echo "destroy_count=${DESTROY_COUNT}"
-            echo "summary_text=Destroy: ${DESTROY_COUNT}"
+            echo "destroy_mode=${DESTROY_MODE}"
+            echo "summary_text=Mode: ${DESTROY_MODE}, Destroy: ${DESTROY_COUNT}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Upload destroy plan artifact
@@ -102,6 +231,8 @@ jobs:
           path: |
             ${{ env.TF_WORKING_DIR }}/dev-destroy.tfplan
             ${{ env.TF_WORKING_DIR }}/dev-destroy.tfplan.json
+            ${{ env.TF_WORKING_DIR }}/destroy-resources.txt
+            ${{ env.TF_WORKING_DIR }}/destroy-selection-summary.txt
             ${{ env.TF_WORKING_DIR }}/destroy-plan-summary.md
           retention-days: 1
 
@@ -109,6 +240,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DESTROY_SUMMARY: ${{ steps.destroy_summary.outputs.summary_text }}
+          DESTROY_MODE: ${{ github.event.inputs.destroy_mode }}
         run: |
           jq -n \
             --arg environment "DEV" \
@@ -117,6 +249,7 @@ jobs:
             --arg commit "${GITHUB_SHA}" \
             --arg author "${GITHUB_ACTOR}" \
             --arg summary "${DESTROY_SUMMARY}" \
+            --arg mode "${DESTROY_MODE}" \
             --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             '{
               text: "Terraform destroy plan completed. Awaiting DEV environment approval.",
@@ -128,6 +261,7 @@ jobs:
                   {type: "mrkdwn", text: "*Repository:*\n\($repository)"},
                   {type: "mrkdwn", text: "*Commit:*\n\($commit)"},
                   {type: "mrkdwn", text: "*Author:*\n\($author)"},
+                  {type: "mrkdwn", text: "*Destroy Mode:*\n\($mode)"},
                   {type: "mrkdwn", text: "*Destroy Plan Summary:*\n\($summary)"}
                 ]},
                 {type: "section", text: {type: "mrkdwn", text: "Review the saved destroy plan artifact, then approve the *dev* GitHub Environment deployment gate to destroy DEV infrastructure."}},
@@ -179,6 +313,26 @@ jobs:
           name: terraform-dev-destroy-plan
           path: ${{ env.TF_WORKING_DIR }}
 
+      - name: Confirm reviewed destroy plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          DESTROY_MODE: ${{ github.event.inputs.destroy_mode }}
+          DESTROY_COUNT: ${{ needs.destroy_plan.outputs.destroy_count }}
+        run: |
+          {
+            echo "### Terraform DEV Destroy Apply Confirmation"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| Selected destroy mode | ${DESTROY_MODE} |"
+            echo "| Reviewed resources to destroy | ${DESTROY_COUNT} |"
+            echo ""
+            echo "The apply job will apply the reviewed destroy plan artifact generated in Stage 1."
+            echo ""
+            echo "#### Reviewed plan summary"
+            cat destroy-plan-summary.md
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Terraform apply reviewed destroy plan
         id: destroy_apply
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -202,6 +356,7 @@ jobs:
           PLAN_RESULT: ${{ needs.destroy_plan.result }}
           APPLY_RESULT: ${{ needs.destroy_apply.result }}
           DESTROY_COUNT: ${{ needs.destroy_plan.outputs.destroy_count }}
+          DESTROY_MODE: ${{ needs.destroy_plan.outputs.destroy_mode }}
           DURATION: ${{ needs.destroy_apply.outputs.deployment_duration_seconds }}
         run: |
           STATUS="SUCCESS"
@@ -230,6 +385,7 @@ jobs:
             --arg commit "${GITHUB_SHA}" \
             --arg workflow_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --arg failed_stage "${FAILED_STAGE}" \
+            --arg mode "${DESTROY_MODE:-${{ github.event.inputs.destroy_mode }}}" \
             --arg destroyed "${DESTROY_COUNT:-0}" \
             --arg duration "${DURATION:-0}s" \
             '{
@@ -241,6 +397,7 @@ jobs:
                   {type: "mrkdwn", text: "*Status:*\n\($status)"},
                   {type: "mrkdwn", text: "*Repository:*\n\($repository)"},
                   {type: "mrkdwn", text: "*Commit:*\n\($commit)"},
+                  {type: "mrkdwn", text: "*Destroy Mode:*\n\($mode)"},
                   {type: "mrkdwn", text: "*Resources Destroyed:*\n\($destroyed)"},
                   {type: "mrkdwn", text: "*Duration:*\n\($duration)"},
                   {type: "mrkdwn", text: "*Failed/Skipped Stage:*\n\($failed_stage)"}
