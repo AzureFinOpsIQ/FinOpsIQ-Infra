@@ -8,14 +8,12 @@ on:
     paths:
       - "modules/**"
       - "environments/**"
-      - ".github/workflows/terraform-infra.yml"
   push:
     branches:
       - main
     paths:
       - "modules/**"
       - "environments/**"
-      - ".github/workflows/terraform-infra.yml"
 
 permissions:
   contents: read
