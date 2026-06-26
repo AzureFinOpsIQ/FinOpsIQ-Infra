@@ -81,6 +81,16 @@ jobs:
           if [ -s keyvault-secret-state.txt ]; then
             echo "Removing Key Vault secret data-plane resources from Terraform state because the vault is private."
             while IFS= read -r address; do
+              if [[ "${address}" =~ ^azurerm_key_vault_secret\.app_config\[(.*)\]$ ]]; then
+                key="${BASH_REMATCH[1]}"
+                key="${key%$'\r'}"
+                key="${key#\\\"}"
+                key="${key%\\\"}"
+                key="${key#\"}"
+                key="${key%\"}"
+                address="azurerm_key_vault_secret.app_config[\"${key}\"]"
+              fi
+              echo "Removing state address: ${address}"
               terraform state rm "${address}"
             done < keyvault-secret-state.txt
           else
