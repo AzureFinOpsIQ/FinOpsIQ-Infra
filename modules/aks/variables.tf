@@ -56,6 +56,12 @@ variable "private_dns_zone_id" {
   default     = null
 }
 
+variable "disk_encryption_set_id" {
+  description = "Optional disk encryption set ID used by AKS for customer-managed encryption."
+  type        = string
+  default     = null
+}
+
 variable "system_node_pool" {
   description = "System node pool configuration."
   type = object({

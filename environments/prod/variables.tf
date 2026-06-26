@@ -319,6 +319,7 @@ variable "aks" {
     dns_service_ip                     = string
     azure_rbac_enabled                 = bool
     private_cluster_enabled            = optional(bool, true)
+    disk_encryption_set_id             = optional(string)
     managed_prometheus_enabled         = optional(bool, true)
     key_vault_secrets_provider_enabled = optional(bool, true)
     system_node_pool = object({

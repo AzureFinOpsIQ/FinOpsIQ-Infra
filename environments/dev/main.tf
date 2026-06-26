@@ -339,6 +339,7 @@ module "aks" {
   user_node_pools                    = var.aks.user_node_pools
   private_cluster_enabled            = var.aks.private_cluster_enabled
   private_dns_zone_id                = var.aks.private_cluster_enabled ? "System" : null
+  disk_encryption_set_id             = var.aks.disk_encryption_set_id
   network_policy                     = var.aks.network_policy
   network_plugin_mode                = var.aks.network_plugin_mode
   service_cidr                       = var.aks.service_cidr

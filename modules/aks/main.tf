@@ -4,10 +4,15 @@ resource "azurerm_kubernetes_cluster" "this" {
   location                  = var.location
   dns_prefix                = var.dns_prefix
   kubernetes_version        = var.kubernetes_version
+  automatic_upgrade_channel = "stable"
+  sku_tier                  = "Standard"
   private_cluster_enabled   = var.private_cluster_enabled
   private_dns_zone_id       = var.private_dns_zone_id
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
+  azure_policy_enabled      = true
+  local_account_disabled    = true
+  disk_encryption_set_id    = var.disk_encryption_set_id
   tags                      = var.tags
 
   default_node_pool {
@@ -18,8 +23,10 @@ resource "azurerm_kubernetes_cluster" "this" {
     node_count                   = var.system_node_pool.node_count
     min_count                    = var.system_node_pool.min_count
     max_count                    = var.system_node_pool.max_count
-    max_pods                     = var.system_node_pool.max_pods
+    max_pods                     = 50
+    os_disk_type                 = "Ephemeral"
     os_disk_size_gb              = var.system_node_pool.os_disk_size_gb
+    host_encryption_enabled      = true
     only_critical_addons_enabled = true
     temporary_name_for_rotation  = var.system_node_pool.temporary_name_for_rotation
   }
@@ -75,16 +82,18 @@ resource "azurerm_kubernetes_cluster" "this" {
 resource "azurerm_kubernetes_cluster_node_pool" "user" {
   for_each = var.user_node_pools
 
-  name                  = each.value.name
-  kubernetes_cluster_id = azurerm_kubernetes_cluster.this.id
-  vm_size               = each.value.vm_size
-  vnet_subnet_id        = var.aks_subnet_id
-  mode                  = "User"
-  auto_scaling_enabled  = each.value.enable_auto_scaling
-  node_count            = each.value.node_count
-  min_count             = each.value.min_count
-  max_count             = each.value.max_count
-  max_pods              = each.value.max_pods
-  os_disk_size_gb       = each.value.os_disk_size_gb
-  tags                  = var.tags
+  name                    = each.value.name
+  kubernetes_cluster_id   = azurerm_kubernetes_cluster.this.id
+  vm_size                 = each.value.vm_size
+  vnet_subnet_id          = var.aks_subnet_id
+  mode                    = "User"
+  auto_scaling_enabled    = each.value.enable_auto_scaling
+  node_count              = each.value.node_count
+  min_count               = each.value.min_count
+  max_count               = each.value.max_count
+  max_pods                = 50
+  os_disk_type            = "Ephemeral"
+  os_disk_size_gb         = each.value.os_disk_size_gb
+  host_encryption_enabled = true
+  tags                    = var.tags
 }

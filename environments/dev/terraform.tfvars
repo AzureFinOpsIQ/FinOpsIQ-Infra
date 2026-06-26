@@ -337,7 +337,7 @@ aks = {
     min_count                   = 1
     max_count                   = 2
     max_pods                    = 50
-    os_disk_size_gb             = 64
+    os_disk_size_gb             = 30
     temporary_name_for_rotation = "sysrot"
   }
   user_node_pools = {
@@ -349,7 +349,7 @@ aks = {
       min_count           = 1
       max_count           = 3
       max_pods            = 50
-      os_disk_size_gb     = 128
+      os_disk_size_gb     = 30
     }
   }
 }
