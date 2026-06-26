@@ -296,6 +296,8 @@ managed_grafana = {
 }
 
 managed_identities = {
+  frontend     = { name = "id-finopsiq-prod-frontend" }
+  apiGateway   = { name = "id-finopsiq-prod-api-gateway" }
   auth         = { name = "id-finopsiq-prod-auth" }
   collection   = { name = "id-finopsiq-prod-collection" }
   processing   = { name = "id-finopsiq-prod-processing" }
@@ -304,6 +306,8 @@ managed_identities = {
 }
 
 workload_service_accounts = {
+  frontend     = "frontend"
+  apiGateway   = "api-gateway"
   auth         = "auth-service"
   collection   = "collection-service"
   processing   = "processing-service"
@@ -312,16 +316,17 @@ workload_service_accounts = {
 }
 
 aks = {
-  name                       = "aks-finopsiq-prod"
-  dns_prefix                 = "aks-finopsiq-prod"
-  kubernetes_version         = "1.34"
-  subnet_key                 = "aks_nodes"
-  network_policy             = "azure"
-  service_cidr               = "10.51.0.0/16"
-  dns_service_ip             = "10.51.0.10"
-  azure_rbac_enabled         = true
-  private_cluster_enabled    = true
-  managed_prometheus_enabled = true
+  name                               = "aks-finopsiq-prod"
+  dns_prefix                         = "aks-finopsiq-prod"
+  kubernetes_version                 = "1.34"
+  subnet_key                         = "aks_nodes"
+  network_policy                     = "azure"
+  service_cidr                       = "10.51.0.0/16"
+  dns_service_ip                     = "10.51.0.10"
+  azure_rbac_enabled                 = true
+  private_cluster_enabled            = true
+  managed_prometheus_enabled         = true
+  key_vault_secrets_provider_enabled = true
   system_node_pool = {
     name                        = "system"
     vm_size                     = "Standard_D2s_v3"

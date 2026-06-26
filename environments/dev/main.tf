@@ -42,41 +42,9 @@ locals {
     key => "system:serviceaccount:${var.helm_namespace}:${service_account}"
   }
 
-  bastion_subnet_id    = try(module.network.subnet_ids[var.bastion.subnet_key], "")
-  management_subnet_id = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
-
-  app_config_values = merge(
-    {
-      AZURE_TENANT_ID                       = var.tenant_id
-      STORAGE_PROVIDER                      = "cosmos"
-      STORAGE_DATA_DIR                      = "/tmp/finopsiq/storage"
-      DATA_RAW_DIR                          = "/tmp/finopsiq/raw"
-      DATA_PROCESSED_DIR                    = "/tmp/finopsiq/processed"
-      DATA_EMBEDDINGS_DIR                   = "/tmp/finopsiq/embeddings"
-      COSMOS_ENDPOINT                       = module.cosmosdb.endpoint
-      COSMOS_DATABASE                       = module.cosmosdb.database_name
-      SERVICE_BUS_NAMESPACE                 = "${module.servicebus.namespace_name}.servicebus.windows.net"
-      SERVICE_BUS_TOPIC                     = module.servicebus.topic_name
-      EVENT_PROVIDER                        = "service_bus"
-      AZURE_STORAGE_ACCOUNT_URL             = module.storage.primary_blob_endpoint
-      AZURE_STORAGE_CONTAINER               = module.storage.container_name
-      APPLICATIONINSIGHTS_CONNECTION_STRING = module.application_insights.connection_string
-      KEY_VAULT_URL                         = "https://${module.keyvault.name}.vault.azure.net/"
-      USE_MANAGED_IDENTITY                  = "true"
-      AUTH_SERVICE_URL                      = "http://auth-service:8000"
-      COLLECTION_SERVICE_URL                = "http://collection-service:8000"
-      PROCESSING_SERVICE_URL                = "http://processing-service:8000"
-      AI_SERVICE_URL                        = "http://ai-service:8000"
-      NOTIFICATION_SERVICE_URL              = "http://notification-service:8000"
-      AZURE_OPENAI_ENDPOINT                 = module.openai.endpoint
-      AZURE_OPENAI_DEPLOYMENT_NAME          = module.openai.deployment_names["chat"]
-      AZURE_OPENAI_EMBEDDING_DEPLOYMENT     = module.openai.deployment_names["embeddings"]
-      AZURE_SEARCH_ENDPOINT                 = module.ai_search.endpoint
-      AZURE_SEARCH_INDEX_NAME               = "finops-knowledge"
-      AZURE_SEARCH_SEMANTIC_CONFIG          = "finops-semantic"
-    },
-    var.app_config_secrets
-  )
+  bastion_subnet_id             = try(module.network.subnet_ids[var.bastion.subnet_key], "")
+  management_subnet_id          = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
+  application_gateway_subnet_id = try(module.network.subnet_ids[var.application_gateway.subnet_key], "")
 }
 
 resource "random_password" "management_vm_admin" {
@@ -183,7 +151,7 @@ module "application_gateway" {
   waf_policy_name          = var.application_gateway.waf_policy_name
   resource_group_name      = module.resource_group.name
   location                 = module.resource_group.location
-  subnet_id                = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.application_gateway.subnet_key].name}"
+  subnet_id                = local.application_gateway_subnet_id
   sku_name                 = var.application_gateway.sku_name
   sku_tier                 = var.application_gateway.sku_tier
   autoscale_min_capacity   = var.application_gateway.autoscale_min_capacity
@@ -229,10 +197,10 @@ resource "azurerm_key_vault_secret" "management_vm_admin_password" {
 }
 
 resource "azurerm_key_vault_secret" "app_config" {
-  for_each = toset(nonsensitive(keys(local.app_config_values)))
+  for_each = toset(nonsensitive(keys(var.app_config_secrets)))
 
   name         = replace(each.value, "_", "-")
-  value        = local.app_config_values[each.value]
+  value        = var.app_config_secrets[each.value]
   key_vault_id = module.keyvault.id
   tags         = local.common_tags
 
@@ -444,6 +412,11 @@ module "role_assignments" {
       agic_resource_group_reader = {
         scope                = module.resource_group.id
         role_definition_name = "Reader"
+        principal_id         = module.aks.ingress_application_gateway_identity_object_id
+      }
+      agic_appgw_subnet_network_contributor = {
+        scope                = local.application_gateway_subnet_id
+        role_definition_name = "Network Contributor"
         principal_id         = module.aks.ingress_application_gateway_identity_object_id
       }
       management_vm_aks_cluster_admin = {

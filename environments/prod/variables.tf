@@ -49,6 +49,12 @@ variable "workload_service_accounts" {
   type        = map(string)
 }
 
+variable "app_config_secrets" {
+  description = "Application secret values to store in Key Vault and sync into Kubernetes with CSI. Keys should match environment variable names."
+  type        = map(string)
+  default     = {}
+}
+
 variable "platform_admin_object_id" {
   description = "Microsoft Entra object ID that receives Azure Kubernetes Service RBAC Cluster Admin on AKS. Leave empty to skip assignment until a platform admin is selected."
   type        = string
@@ -309,17 +315,18 @@ variable "managed_identities" {
 variable "aks" {
   description = "AKS configuration."
   type = object({
-    name                       = string
-    dns_prefix                 = string
-    kubernetes_version         = string
-    subnet_key                 = string
-    network_policy             = string
-    network_plugin_mode        = optional(string)
-    service_cidr               = string
-    dns_service_ip             = string
-    azure_rbac_enabled         = bool
-    private_cluster_enabled    = optional(bool, true)
-    managed_prometheus_enabled = optional(bool, true)
+    name                               = string
+    dns_prefix                         = string
+    kubernetes_version                 = string
+    subnet_key                         = string
+    network_policy                     = string
+    network_plugin_mode                = optional(string)
+    service_cidr                       = string
+    dns_service_ip                     = string
+    azure_rbac_enabled                 = bool
+    private_cluster_enabled            = optional(bool, true)
+    managed_prometheus_enabled         = optional(bool, true)
+    key_vault_secrets_provider_enabled = optional(bool, true)
     system_node_pool = object({
       name                = string
       vm_size             = string

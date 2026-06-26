@@ -50,7 +50,7 @@ variable "workload_service_accounts" {
 }
 
 variable "app_config_secrets" {
-  description = "Application configuration values to store in Key Vault and sync into Kubernetes with CSI. Keys should match environment variable names."
+  description = "Application secret values to store in Key Vault and sync into Kubernetes with CSI. Keys should match environment variable names."
   type        = map(string)
   default     = {}
 }

@@ -284,6 +284,17 @@ jobs:
           END_TIME=$(date +%s)
           echo "deployment_duration_seconds=$((END_TIME - START_TIME))" >> "${GITHUB_OUTPUT}"
 
+      - name: Allow Azure RBAC propagation and refresh AKS credentials
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "Waiting for Azure role assignments to propagate before downstream deployment steps."
+          sleep 120
+          az aks get-credentials \
+            --resource-group rg-finopsiq-dev \
+            --name aks-finopsiq-dev \
+            --admin \
+            --overwrite-existing
+
       - name: Post-apply Terraform outputs and state
         id: post_apply
         working-directory: ${{ env.TF_WORKING_DIR }}

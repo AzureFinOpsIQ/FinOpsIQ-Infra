@@ -42,8 +42,9 @@ locals {
     key => "system:serviceaccount:${var.helm_namespace}:${service_account}"
   }
 
-  bastion_subnet_id    = try(module.network.subnet_ids[var.bastion.subnet_key], "")
-  management_subnet_id = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
+  bastion_subnet_id             = try(module.network.subnet_ids[var.bastion.subnet_key], "")
+  management_subnet_id          = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
+  application_gateway_subnet_id = try(module.network.subnet_ids[var.application_gateway.subnet_key], "")
 }
 
 resource "random_password" "management_vm_admin" {
@@ -147,7 +148,7 @@ module "application_gateway" {
   waf_policy_name        = var.application_gateway.waf_policy_name
   resource_group_name    = module.resource_group.name
   location               = module.resource_group.location
-  subnet_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.application_gateway.subnet_key].name}"
+  subnet_id              = local.application_gateway_subnet_id
   sku_name               = var.application_gateway.sku_name
   sku_tier               = var.application_gateway.sku_tier
   autoscale_min_capacity = var.application_gateway.autoscale_min_capacity
@@ -186,6 +187,17 @@ resource "azurerm_role_assignment" "terraform_keyvault_secrets_officer" {
 resource "azurerm_key_vault_secret" "management_vm_admin_password" {
   name         = var.management_vm.admin_password_secret_name
   value        = random_password.management_vm_admin.result
+  key_vault_id = module.keyvault.id
+  tags         = local.common_tags
+
+  depends_on = [azurerm_role_assignment.terraform_keyvault_secrets_officer]
+}
+
+resource "azurerm_key_vault_secret" "app_config" {
+  for_each = toset(nonsensitive(keys(var.app_config_secrets)))
+
+  name         = replace(each.value, "_", "-")
+  value        = var.app_config_secrets[each.value]
   key_vault_id = module.keyvault.id
   tags         = local.common_tags
 
@@ -347,27 +359,28 @@ module "aks_private_dns" {
 }
 
 module "aks" {
-  source                         = "../../modules/aks"
-  name                           = var.aks.name
-  resource_group_name            = module.resource_group.name
-  location                       = module.resource_group.location
-  dns_prefix                     = var.aks.dns_prefix
-  kubernetes_version             = var.aks.kubernetes_version
-  tenant_id                      = var.tenant_id
-  aks_subnet_id                  = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
-  system_node_pool               = var.aks.system_node_pool
-  user_node_pools                = var.aks.user_node_pools
-  private_cluster_enabled        = var.aks.private_cluster_enabled
-  private_dns_zone_id            = var.aks.private_cluster_enabled ? "System" : null
-  network_policy                 = var.aks.network_policy
-  network_plugin_mode            = var.aks.network_plugin_mode
-  service_cidr                   = var.aks.service_cidr
-  dns_service_ip                 = var.aks.dns_service_ip
-  azure_rbac_enabled             = var.aks.azure_rbac_enabled
-  log_analytics_workspace_id     = module.monitor.id
-  managed_prometheus_enabled     = var.aks.managed_prometheus_enabled
-  ingress_application_gateway_id = module.application_gateway.id
-  tags                           = local.common_tags
+  source                             = "../../modules/aks"
+  name                               = var.aks.name
+  resource_group_name                = module.resource_group.name
+  location                           = module.resource_group.location
+  dns_prefix                         = var.aks.dns_prefix
+  kubernetes_version                 = var.aks.kubernetes_version
+  tenant_id                          = var.tenant_id
+  aks_subnet_id                      = "/subscriptions/${var.subscription_id}/resourceGroups/${module.resource_group.name}/providers/Microsoft.Network/virtualNetworks/${var.network.name}/subnets/${var.network.subnets[var.aks.subnet_key].name}"
+  system_node_pool                   = var.aks.system_node_pool
+  user_node_pools                    = var.aks.user_node_pools
+  private_cluster_enabled            = var.aks.private_cluster_enabled
+  private_dns_zone_id                = var.aks.private_cluster_enabled ? "System" : null
+  network_policy                     = var.aks.network_policy
+  network_plugin_mode                = var.aks.network_plugin_mode
+  service_cidr                       = var.aks.service_cidr
+  dns_service_ip                     = var.aks.dns_service_ip
+  azure_rbac_enabled                 = var.aks.azure_rbac_enabled
+  log_analytics_workspace_id         = module.monitor.id
+  managed_prometheus_enabled         = var.aks.managed_prometheus_enabled
+  key_vault_secrets_provider_enabled = var.aks.key_vault_secrets_provider_enabled
+  ingress_application_gateway_id     = module.application_gateway.id
+  tags                               = local.common_tags
 
   depends_on = [module.network, module.application_gateway]
 }
@@ -404,6 +417,26 @@ module "role_assignments" {
         scope                = module.resource_group.id
         role_definition_name = "Reader"
         principal_id         = module.aks.ingress_application_gateway_identity_object_id
+      }
+      agic_appgw_subnet_network_contributor = {
+        scope                = local.application_gateway_subnet_id
+        role_definition_name = "Network Contributor"
+        principal_id         = module.aks.ingress_application_gateway_identity_object_id
+      }
+      management_vm_aks_cluster_admin = {
+        scope                = module.aks.id
+        role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+        principal_id         = module.management_vm.vm_principal_id
+      }
+      management_vm_keyvault_secrets_user = {
+        scope                = module.keyvault.id
+        role_definition_name = "Key Vault Secrets User"
+        principal_id         = module.management_vm.vm_principal_id
+      }
+      management_vm_keyvault_reader = {
+        scope                = module.keyvault.id
+        role_definition_name = "Reader"
+        principal_id         = module.management_vm.vm_principal_id
       }
     },
     var.platform_admin_object_id == "" ? {} : {
