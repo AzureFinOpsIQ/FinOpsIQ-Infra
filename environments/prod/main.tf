@@ -26,8 +26,6 @@ provider "azurerm" {
   }
 }
 
-data "azurerm_client_config" "current" {}
-
 locals {
   common_tags = merge(
     {
@@ -176,32 +174,6 @@ module "keyvault" {
   soft_delete_retention_days    = var.keyvault.soft_delete_retention_days
   public_network_access_enabled = var.keyvault.public_network_access_enabled
   tags                          = local.common_tags
-}
-
-resource "azurerm_role_assignment" "terraform_keyvault_secrets_officer" {
-  scope                = module.keyvault.id
-  role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
-
-resource "azurerm_key_vault_secret" "management_vm_admin_password" {
-  name         = var.management_vm.admin_password_secret_name
-  value        = random_password.management_vm_admin.result
-  key_vault_id = module.keyvault.id
-  tags         = local.common_tags
-
-  depends_on = [azurerm_role_assignment.terraform_keyvault_secrets_officer]
-}
-
-resource "azurerm_key_vault_secret" "app_config" {
-  for_each = toset(nonsensitive(keys(var.app_config_secrets)))
-
-  name         = replace(each.value, "_", "-")
-  value        = var.app_config_secrets[each.value]
-  key_vault_id = module.keyvault.id
-  tags         = local.common_tags
-
-  depends_on = [azurerm_role_assignment.terraform_keyvault_secrets_officer]
 }
 
 module "cosmosdb" {

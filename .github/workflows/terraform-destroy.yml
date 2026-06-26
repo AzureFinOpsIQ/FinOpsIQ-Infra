@@ -74,6 +74,17 @@ jobs:
             -backend-config="key=${TF_STATE_KEY}" \
             -backend-config="use_azuread_auth=true"
 
+      - name: Remove unmanaged Key Vault secret entries from state
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform state list | grep '^azurerm_key_vault_secret\.' > keyvault-secret-state.txt || true
+          if [ -s keyvault-secret-state.txt ]; then
+            echo "Removing Key Vault secret data-plane resources from Terraform state because the vault is private."
+            xargs -r -n1 terraform state rm < keyvault-secret-state.txt
+          else
+            echo "No Key Vault secret resources found in Terraform state."
+          fi
+
       - name: Terraform validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate

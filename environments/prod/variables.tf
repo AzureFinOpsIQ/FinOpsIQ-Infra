@@ -49,12 +49,6 @@ variable "workload_service_accounts" {
   type        = map(string)
 }
 
-variable "app_config_secrets" {
-  description = "Application secret values to store in Key Vault and sync into Kubernetes with CSI. Keys should match environment variable names."
-  type        = map(string)
-  default     = {}
-}
-
 variable "platform_admin_object_id" {
   description = "Microsoft Entra object ID that receives Azure Kubernetes Service RBAC Cluster Admin on AKS. Leave empty to skip assignment until a platform admin is selected."
   type        = string
