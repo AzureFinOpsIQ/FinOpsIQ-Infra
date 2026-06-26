@@ -80,7 +80,9 @@ jobs:
           terraform state list | grep '^azurerm_key_vault_secret\.' > keyvault-secret-state.txt || true
           if [ -s keyvault-secret-state.txt ]; then
             echo "Removing Key Vault secret data-plane resources from Terraform state because the vault is private."
-            xargs -r -n1 terraform state rm < keyvault-secret-state.txt
+            while IFS= read -r address; do
+              terraform state rm "${address}"
+            done < keyvault-secret-state.txt
           else
             echo "No Key Vault secret resources found in Terraform state."
           fi
