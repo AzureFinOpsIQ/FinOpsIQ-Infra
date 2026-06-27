@@ -25,8 +25,8 @@ resource "azurerm_web_application_firewall_policy" "this" {
 
   managed_rules {
     managed_rule_set {
-      type    = var.waf_rule_set_type
-      version = var.waf_rule_set_version
+      type    = "OWASP"
+      version = "3.2"
     }
   }
 }
