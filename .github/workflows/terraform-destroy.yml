@@ -143,6 +143,7 @@ jobs:
             "module.role_assignments.azurerm_role_assignment.this[\"agic_appgw_subnet_network_contributor\"]"
             "module.role_assignments.azurerm_role_assignment.this[\"management_vm_aks_cluster_admin\"]"
             "module.role_assignments.azurerm_role_assignment.this[\"management_vm_keyvault_reader\"]"
+            "module.role_assignments.azurerm_role_assignment.this[\"management_vm_keyvault_secrets_officer\"]"
             "module.role_assignments.azurerm_role_assignment.this[\"management_vm_keyvault_secrets_user\"]"
           )
 

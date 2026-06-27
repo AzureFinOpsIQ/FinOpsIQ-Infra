@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 4.0"
     }
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "~> 3.0"
+    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.6"
@@ -24,6 +28,10 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
+}
+
+provider "azuread" {
+  tenant_id = var.tenant_id
 }
 
 locals {
@@ -368,6 +376,22 @@ module "workload_identity" {
   }
 }
 
+module "entra_applications" {
+  source                      = "../../modules/entra-applications"
+  environment                 = var.environment
+  login_display_name          = "azure-cost-advisor-${var.environment}-login"
+  internal_api_display_name   = "azure-cost-advisor-${var.environment}-internal-api"
+  collection_display_name     = "azure-cost-advisor-${var.environment}-collection"
+  application_hostname        = var.application_hostname
+  internal_api_identifier_uri = var.internal_api_identifier_uri
+  collection_federated_credential = {
+    issuer  = module.aks.oidc_issuer_url
+    subject = local.workload_identity_subjects["collection"]
+  }
+
+  depends_on = [module.aks]
+}
+
 module "role_assignments" {
   source = "../../modules/role-assignments"
   role_assignments = merge(
@@ -405,6 +429,11 @@ module "role_assignments" {
       management_vm_keyvault_reader = {
         scope                = module.keyvault.id
         role_definition_name = "Reader"
+        principal_id         = module.management_vm.vm_principal_id
+      }
+      management_vm_keyvault_secrets_officer = {
+        scope                = module.keyvault.id
+        role_definition_name = "Key Vault Secrets Officer"
         principal_id         = module.management_vm.vm_principal_id
       }
     },
@@ -520,6 +549,12 @@ output "helm_values" {
     management_vm_private_ip       = module.management_vm.vm_private_ip
     workload_identity_client_ids   = module.managed_identity.client_ids
     workload_identity_subjects     = module.workload_identity.subjects
+    application_hostname           = var.application_hostname
+    argocd_hostname                = var.argocd_hostname
+    entra_login_client_id          = module.entra_applications.login_client_id
+    entra_login_client_secret      = module.entra_applications.login_client_secret
+    internal_api_audience          = module.entra_applications.internal_api_identifier_uri
+    collection_entra_client_id     = module.entra_applications.collection_client_id
   }
   sensitive = true
 }

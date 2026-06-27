@@ -44,6 +44,21 @@ variable "helm_namespace" {
   type        = string
 }
 
+variable "application_hostname" {
+  description = "Public hostname for the FinOpsIQ application."
+  type        = string
+}
+
+variable "argocd_hostname" {
+  description = "Public hostname for ArgoCD."
+  type        = string
+}
+
+variable "internal_api_identifier_uri" {
+  description = "Application ID URI used as the internal service token audience."
+  type        = string
+}
+
 variable "workload_service_accounts" {
   description = "Workload Identity service accounts keyed by managed identity key."
   type        = map(string)
