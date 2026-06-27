@@ -8,7 +8,12 @@ helm_namespace              = "finopsiq-dev"
 application_hostname        = "azurefinopsiq.site"
 argocd_hostname             = "argocd.azurefinopsiq.site"
 internal_api_identifier_uri = "api://azure-cost-advisor-services"
-platform_admin_object_id    = ""
+create_entra_applications   = false
+
+# Existing Entra app registration client IDs used when create_entra_applications is false.
+existing_entra_login_client_id      = ""
+existing_collection_entra_client_id = ""
+platform_admin_object_id            = ""
 
 extra_tags = {
   Project    = "FinsOpsIQ"

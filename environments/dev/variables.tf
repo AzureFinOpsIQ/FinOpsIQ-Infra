@@ -59,6 +59,24 @@ variable "internal_api_identifier_uri" {
   type        = string
 }
 
+variable "create_entra_applications" {
+  description = "Create Microsoft Entra application registrations with Terraform. Requires directory permissions such as Application Administrator or Application Developer."
+  type        = bool
+  default     = false
+}
+
+variable "existing_entra_login_client_id" {
+  description = "Client ID of an existing Microsoft Entra login application when create_entra_applications is false."
+  type        = string
+  default     = ""
+}
+
+variable "existing_collection_entra_client_id" {
+  description = "Client ID of an existing Microsoft Entra collection application when create_entra_applications is false."
+  type        = string
+  default     = ""
+}
+
 variable "workload_service_accounts" {
   description = "Workload Identity service accounts keyed by managed identity key."
   type        = map(string)

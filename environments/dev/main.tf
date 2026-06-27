@@ -377,6 +377,8 @@ module "workload_identity" {
 }
 
 module "entra_applications" {
+  count = var.create_entra_applications ? 1 : 0
+
   source                      = "../../modules/entra-applications"
   environment                 = var.environment
   login_display_name          = "azure-cost-advisor-${var.environment}-login"
@@ -551,10 +553,10 @@ output "helm_values" {
     workload_identity_subjects     = module.workload_identity.subjects
     application_hostname           = var.application_hostname
     argocd_hostname                = var.argocd_hostname
-    entra_login_client_id          = module.entra_applications.login_client_id
-    entra_login_client_secret      = module.entra_applications.login_client_secret
-    internal_api_audience          = module.entra_applications.internal_api_identifier_uri
-    collection_entra_client_id     = module.entra_applications.collection_client_id
+    entra_login_client_id          = var.create_entra_applications ? module.entra_applications[0].login_client_id : var.existing_entra_login_client_id
+    entra_login_client_secret      = var.create_entra_applications ? module.entra_applications[0].login_client_secret : null
+    internal_api_audience          = var.internal_api_identifier_uri
+    collection_entra_client_id     = var.create_entra_applications ? module.entra_applications[0].collection_client_id : var.existing_collection_entra_client_id
   }
   sensitive = true
 }
