@@ -464,7 +464,7 @@ module "role_assignments" {
         role_definition_name = "Storage Blob Data Contributor"
         principal_id         = principal_id
       }
-      if contains(["auth", "collection", "processing", "ai", "notification"], key)
+      if contains(keys(var.workload_service_accounts), key)
     },
     {
       for key, principal_id in module.managed_identity.principal_ids :
