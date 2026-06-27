@@ -165,7 +165,7 @@ application_gateway = {
   waf_enabled            = true
   waf_firewall_mode      = "Prevention"
   waf_rule_set_type      = "OWASP"
-  waf_rule_set_version   = "3.2"
+  waf_rule_set_version   = "3.3"
   zones                  = []
 }
 

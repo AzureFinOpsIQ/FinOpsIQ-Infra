@@ -27,16 +27,6 @@ resource "azurerm_web_application_firewall_policy" "this" {
     managed_rule_set {
       type    = var.waf_rule_set_type
       version = var.waf_rule_set_version
-
-      rule_group_override {
-        rule_group_name = "REQUEST-944-APPLICATION-ATTACK-JAVA"
-
-        rule {
-          id      = "944240"
-          enabled = true
-          action  = "Block"
-        }
-      }
     }
   }
 }
