@@ -467,7 +467,7 @@ module "role_assignments" {
         role_definition_name = "Storage Blob Data Contributor"
         principal_id         = principal_id
       }
-      if contains(["collection", "processing", "ai"], key)
+      if contains(["auth", "collection", "processing", "ai", "notification"], key)
     },
     {
       for key, principal_id in module.managed_identity.principal_ids :
@@ -526,7 +526,7 @@ module "cosmosdb_sql_role_assignments" {
     key => {
       principal_id = principal_id
     }
-    if contains(["auth", "collection", "processing", "ai", "notification"], key)
+    if contains(["apiGateway", "auth", "collection", "processing", "ai", "notification"], key)
   }
 }
 

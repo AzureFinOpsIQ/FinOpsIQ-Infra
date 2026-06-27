@@ -70,6 +70,7 @@ resource "azuread_service_principal" "collection" {
 }
 
 resource "azuread_application_federated_identity_credential" "collection" {
+  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
   application_id = azuread_application.collection.id
   display_name   = "${var.environment}-collection-workload-identity"
   audiences      = ["api://AzureADTokenExchange"]
