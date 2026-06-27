@@ -191,6 +191,25 @@ jobs:
           fi
 
           az provider register --namespace Microsoft.Compute
+          for attempt in $(seq 1 40); do
+            PROVIDER_STATE=$(az provider show \
+              --namespace Microsoft.Compute \
+              --query registrationState \
+              -o tsv)
+            echo "Microsoft.Compute provider registration state: ${PROVIDER_STATE} (${attempt}/40)"
+            if [ "${PROVIDER_STATE}" = "Registered" ]; then
+              break
+            fi
+            sleep 30
+          done
+
+          if [ "${PROVIDER_STATE}" != "Registered" ]; then
+            echo "Microsoft.Compute provider did not reach Registered state after enabling EncryptionAtHost."
+            exit 1
+          fi
+
+          echo "Waiting for EncryptionAtHost registration to propagate to AKS."
+          sleep 180
 
       - name: Terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -375,6 +394,25 @@ jobs:
           fi
 
           az provider register --namespace Microsoft.Compute
+          for attempt in $(seq 1 40); do
+            PROVIDER_STATE=$(az provider show \
+              --namespace Microsoft.Compute \
+              --query registrationState \
+              -o tsv)
+            echo "Microsoft.Compute provider registration state: ${PROVIDER_STATE} (${attempt}/40)"
+            if [ "${PROVIDER_STATE}" = "Registered" ]; then
+              break
+            fi
+            sleep 30
+          done
+
+          if [ "${PROVIDER_STATE}" != "Registered" ]; then
+            echo "Microsoft.Compute provider did not reach Registered state after enabling EncryptionAtHost."
+            exit 1
+          fi
+
+          echo "Waiting for EncryptionAtHost registration to propagate to AKS."
+          sleep 180
 
       - name: Terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
