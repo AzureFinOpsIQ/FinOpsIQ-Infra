@@ -20,9 +20,9 @@ resource "azurerm_kubernetes_cluster" "this" {
     vm_size                      = var.system_node_pool.vm_size
     vnet_subnet_id               = var.aks_subnet_id
     auto_scaling_enabled         = var.system_node_pool.enable_auto_scaling
-    node_count                   = var.system_node_pool.node_count
-    min_count                    = var.system_node_pool.min_count
-    max_count                    = var.system_node_pool.max_count
+    node_count                   = var.system_node_pool.enable_auto_scaling ? null : var.system_node_pool.node_count
+    min_count                    = var.system_node_pool.enable_auto_scaling ? var.system_node_pool.min_count : null
+    max_count                    = var.system_node_pool.enable_auto_scaling ? var.system_node_pool.max_count : null
     max_pods                     = 50
     os_disk_type                 = "Ephemeral"
     os_disk_size_gb              = var.system_node_pool.os_disk_size_gb
@@ -88,9 +88,9 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   vnet_subnet_id          = var.aks_subnet_id
   mode                    = "User"
   auto_scaling_enabled    = each.value.enable_auto_scaling
-  node_count              = each.value.node_count
-  min_count               = each.value.min_count
-  max_count               = each.value.max_count
+  node_count              = each.value.enable_auto_scaling ? null : each.value.node_count
+  min_count               = each.value.enable_auto_scaling ? each.value.min_count : null
+  max_count               = each.value.enable_auto_scaling ? each.value.max_count : null
   max_pods                = 50
   os_disk_type            = "Ephemeral"
   os_disk_size_gb         = each.value.os_disk_size_gb
