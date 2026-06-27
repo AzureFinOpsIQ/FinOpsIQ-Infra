@@ -423,6 +423,11 @@ module "role_assignments" {
         role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
         principal_id         = module.management_vm.vm_principal_id
       }
+      management_vm_aks_cluster_user = {
+        scope                = module.aks.id
+        role_definition_name = "Azure Kubernetes Service Cluster User Role"
+        principal_id         = module.management_vm.vm_principal_id
+      }
       management_vm_keyvault_secrets_user = {
         scope                = module.keyvault.id
         role_definition_name = "Key Vault Secrets User"
