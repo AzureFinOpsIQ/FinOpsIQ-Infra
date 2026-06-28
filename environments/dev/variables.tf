@@ -65,32 +65,20 @@ variable "create_entra_applications" {
   default     = false
 }
 
-variable "existing_entra_login_client_id" {
-  description = "Client ID of an existing Microsoft Entra login application when create_entra_applications is false."
+variable "azure_cost_advisor_dev_login_client_id" {
+  description = "Application client ID for azure-cost-advisor-dev-login when create_entra_applications is false."
   type        = string
   default     = ""
 }
 
-variable "existing_collection_entra_client_id" {
-  description = "Client ID of an existing Microsoft Entra collection application when create_entra_applications is false."
+variable "azure_cost_advisor_dev_collection_client_id" {
+  description = "Application client ID for azure-cost-advisor-dev-collection when create_entra_applications is false."
   type        = string
   default     = ""
 }
 
-variable "existing_collection_entra_application_object_id" {
-  description = "Object ID of the existing Microsoft Entra collection application registration. Required to create its federated identity credential without listing applications."
-  type        = string
-  default     = ""
-}
-
-variable "existing_collection_entra_service_principal_object_id" {
-  description = "Object ID of the existing Microsoft Entra collection service principal. Optional; when set, Terraform assigns subscription reader roles for live collection."
-  type        = string
-  default     = ""
-}
-
-variable "manage_existing_collection_entra_federated_credential" {
-  description = "Create the AKS Workload Identity federated credential on the existing collection app registration when create_entra_applications is false."
+variable "manage_azure_cost_advisor_dev_collection_federated_credential" {
+  description = "Create the AKS Workload Identity federated credential on azure-cost-advisor-dev-collection when create_entra_applications is false."
   type        = bool
   default     = true
 }

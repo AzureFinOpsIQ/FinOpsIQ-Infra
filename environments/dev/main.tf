@@ -394,15 +394,30 @@ module "entra_applications" {
   depends_on = [module.aks]
 }
 
-resource "azuread_application_federated_identity_credential" "existing_collection" {
-  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
+data "azuread_application" "azure_cost_advisor_dev_collection" {
   count = (
     !var.create_entra_applications
-    && var.manage_existing_collection_entra_federated_credential
-    && var.existing_collection_entra_application_object_id != ""
+    && var.manage_azure_cost_advisor_dev_collection_federated_credential
+    && var.azure_cost_advisor_dev_collection_client_id != ""
   ) ? 1 : 0
 
-  application_id = var.existing_collection_entra_application_object_id
+  client_id = var.azure_cost_advisor_dev_collection_client_id
+}
+
+data "azuread_service_principal" "azure_cost_advisor_dev_collection" {
+  count = (
+    !var.create_entra_applications
+    && var.azure_cost_advisor_dev_collection_client_id != ""
+  ) ? 1 : 0
+
+  client_id = var.azure_cost_advisor_dev_collection_client_id
+}
+
+resource "azuread_application_federated_identity_credential" "azure_cost_advisor_dev_collection" {
+  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
+  count = length(data.azuread_application.azure_cost_advisor_dev_collection)
+
+  application_id = data.azuread_application.azure_cost_advisor_dev_collection[0].id
   display_name   = "${var.environment}-collection-workload-identity"
   audiences      = ["api://AzureADTokenExchange"]
   issuer         = module.aks.oidc_issuer_url
@@ -468,21 +483,21 @@ module "role_assignments" {
         principal_id         = var.platform_admin_object_id
       }
     },
-    var.existing_collection_entra_service_principal_object_id == "" ? {} : {
+    length(data.azuread_service_principal.azure_cost_advisor_dev_collection) == 0 ? {} : {
       collection_app_subscription_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Reader"
-        principal_id         = var.existing_collection_entra_service_principal_object_id
+        principal_id         = data.azuread_service_principal.azure_cost_advisor_dev_collection[0].object_id
       }
       collection_app_cost_management_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Cost Management Reader"
-        principal_id         = var.existing_collection_entra_service_principal_object_id
+        principal_id         = data.azuread_service_principal.azure_cost_advisor_dev_collection[0].object_id
       }
       collection_app_monitoring_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Monitoring Reader"
-        principal_id         = var.existing_collection_entra_service_principal_object_id
+        principal_id         = data.azuread_service_principal.azure_cost_advisor_dev_collection[0].object_id
       }
     },
     {
@@ -592,10 +607,10 @@ output "helm_values" {
     workload_identity_subjects     = module.workload_identity.subjects
     application_hostname           = var.application_hostname
     argocd_hostname                = var.argocd_hostname
-    entra_login_client_id          = var.create_entra_applications ? module.entra_applications[0].login_client_id : var.existing_entra_login_client_id
+    entra_login_client_id          = var.create_entra_applications ? module.entra_applications[0].login_client_id : var.azure_cost_advisor_dev_login_client_id
     entra_login_client_secret      = var.create_entra_applications ? module.entra_applications[0].login_client_secret : null
     internal_api_audience          = var.internal_api_identifier_uri
-    collection_entra_client_id     = var.create_entra_applications ? module.entra_applications[0].collection_client_id : var.existing_collection_entra_client_id
+    collection_entra_client_id     = var.create_entra_applications ? module.entra_applications[0].collection_client_id : var.azure_cost_advisor_dev_collection_client_id
   }
   sensitive = true
 }
