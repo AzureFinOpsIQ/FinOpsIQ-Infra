@@ -1,3 +1,5 @@
+resource "random_uuid" "internal_service_access_app_role" {}
+
 resource "azuread_application" "login" {
   display_name     = var.login_display_name
   sign_in_audience = "AzureADMyOrg"
@@ -37,6 +39,15 @@ resource "azuread_application" "internal_api" {
   display_name     = var.internal_api_display_name
   identifier_uris  = [var.internal_api_identifier_uri]
   sign_in_audience = "AzureADMyOrg"
+
+  app_role {
+    allowed_member_types = ["Application"]
+    description          = "Allows FinOpsIQ workloads to call internal service APIs."
+    display_name         = "Internal service access"
+    enabled              = true
+    id                   = random_uuid.internal_service_access_app_role.result
+    value                = "InternalService.Access"
+  }
 
   api {
     requested_access_token_version = 2

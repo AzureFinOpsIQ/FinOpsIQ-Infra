@@ -59,48 +59,6 @@ variable "internal_api_identifier_uri" {
   type        = string
 }
 
-variable "create_entra_applications" {
-  description = "Create Microsoft Entra application registrations with Terraform. Requires directory permissions such as Application Administrator or Application Developer."
-  type        = bool
-  default     = false
-}
-
-variable "azure_cost_advisor_dev_login_client_id" {
-  description = "Application client ID for azure-cost-advisor-dev-login when create_entra_applications is false."
-  type        = string
-  default     = ""
-}
-
-variable "azure_cost_advisor_dev_collection_client_id" {
-  description = "Application client ID for azure-cost-advisor-dev-collection when create_entra_applications is false."
-  type        = string
-  default     = ""
-}
-
-variable "azure_cost_advisor_dev_collection_application_object_id" {
-  description = "Application object ID for azure-cost-advisor-dev-collection. Used to build the AzureAD provider resource ID /applications/<object-id> without a Microsoft Graph lookup."
-  type        = string
-  default     = ""
-}
-
-variable "azure_cost_advisor_dev_collection_application_resource_id" {
-  description = "AzureAD provider application resource ID for azure-cost-advisor-dev-collection, in the format /applications/<object-id>. Overrides azure_cost_advisor_dev_collection_application_object_id when set."
-  type        = string
-  default     = ""
-}
-
-variable "azure_cost_advisor_dev_collection_service_principal_object_id" {
-  description = "Enterprise application/service principal object ID for azure-cost-advisor-dev-collection. Used for Azure RBAC role assignments without a Microsoft Graph lookup."
-  type        = string
-  default     = ""
-}
-
-variable "manage_azure_cost_advisor_dev_collection_federated_credential" {
-  description = "Create the AKS Workload Identity federated credential on azure-cost-advisor-dev-collection when create_entra_applications is false."
-  type        = bool
-  default     = true
-}
-
 variable "workload_service_accounts" {
   description = "Workload Identity service accounts keyed by managed identity key."
   type        = map(string)

@@ -51,13 +51,6 @@ locals {
   bastion_subnet_id             = try(module.network.subnet_ids[var.bastion.subnet_key], "")
   management_subnet_id          = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
   application_gateway_subnet_id = try(module.network.subnet_ids[var.application_gateway.subnet_key], "")
-  azure_cost_advisor_dev_collection_application_id = (
-    var.azure_cost_advisor_dev_collection_application_resource_id != ""
-    ? var.azure_cost_advisor_dev_collection_application_resource_id
-    : var.azure_cost_advisor_dev_collection_application_object_id != ""
-    ? "/applications/${var.azure_cost_advisor_dev_collection_application_object_id}"
-    : ""
-  )
 }
 
 resource "random_password" "management_vm_admin" {
@@ -384,13 +377,11 @@ module "workload_identity" {
 }
 
 module "entra_applications" {
-  count = var.create_entra_applications ? 1 : 0
-
   source                      = "../../modules/entra-applications"
   environment                 = var.environment
-  login_display_name          = "azure-cost-advisor-${var.environment}-login"
-  internal_api_display_name   = "azure-cost-advisor-${var.environment}-internal-api"
-  collection_display_name     = "azure-cost-advisor-${var.environment}-collection"
+  login_display_name          = "finopsiq-login"
+  internal_api_display_name   = "finopsiq-internal-api"
+  collection_display_name     = "finopsiq-collection"
   application_hostname        = var.application_hostname
   internal_api_identifier_uri = var.internal_api_identifier_uri
   collection_federated_credential = {
@@ -401,27 +392,10 @@ module "entra_applications" {
   depends_on = [module.aks]
 }
 
-resource "azuread_application_federated_identity_credential" "azure_cost_advisor_dev_collection" {
-  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
-  count = (
-    !var.create_entra_applications
-    && var.manage_azure_cost_advisor_dev_collection_federated_credential
-  ) ? 1 : 0
-
-  application_id = local.azure_cost_advisor_dev_collection_application_id
-  display_name   = "${var.environment}-collection-workload-identity"
-  audiences      = ["api://AzureADTokenExchange"]
-  issuer         = module.aks.oidc_issuer_url
-  subject        = local.workload_identity_subjects["collection"]
-
-  lifecycle {
-    precondition {
-      condition     = local.azure_cost_advisor_dev_collection_application_id != ""
-      error_message = "Set azure_cost_advisor_dev_collection_application_object_id or azure_cost_advisor_dev_collection_application_resource_id when managing the collection federated credential."
-    }
-  }
-
-  depends_on = [module.aks]
+resource "azuread_app_role_assignment" "api_gateway_internal_api" {
+  app_role_id         = module.entra_applications.internal_api_app_role_ids["InternalService.Access"]
+  principal_object_id = module.managed_identity.principal_ids["apiGateway"]
+  resource_object_id  = module.entra_applications.internal_api_service_principal_object_id
 }
 
 module "role_assignments" {
@@ -481,21 +455,21 @@ module "role_assignments" {
         principal_id         = var.platform_admin_object_id
       }
     },
-    var.azure_cost_advisor_dev_collection_service_principal_object_id == "" ? {} : {
+    {
       collection_app_subscription_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Reader"
-        principal_id         = var.azure_cost_advisor_dev_collection_service_principal_object_id
+        principal_id         = module.entra_applications.collection_service_principal_object_id
       }
       collection_app_cost_management_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Cost Management Reader"
-        principal_id         = var.azure_cost_advisor_dev_collection_service_principal_object_id
+        principal_id         = module.entra_applications.collection_service_principal_object_id
       }
       collection_app_monitoring_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Monitoring Reader"
-        principal_id         = var.azure_cost_advisor_dev_collection_service_principal_object_id
+        principal_id         = module.entra_applications.collection_service_principal_object_id
       }
     },
     {
@@ -605,10 +579,10 @@ output "helm_values" {
     workload_identity_subjects     = module.workload_identity.subjects
     application_hostname           = var.application_hostname
     argocd_hostname                = var.argocd_hostname
-    entra_login_client_id          = var.create_entra_applications ? module.entra_applications[0].login_client_id : var.azure_cost_advisor_dev_login_client_id
-    entra_login_client_secret      = var.create_entra_applications ? module.entra_applications[0].login_client_secret : null
+    entra_login_client_id          = module.entra_applications.login_client_id
+    entra_login_client_secret      = module.entra_applications.login_client_secret
     internal_api_audience          = var.internal_api_identifier_uri
-    collection_entra_client_id     = var.create_entra_applications ? module.entra_applications[0].collection_client_id : var.azure_cost_advisor_dev_collection_client_id
+    collection_entra_client_id     = module.entra_applications.collection_client_id
   }
   sensitive = true
 }

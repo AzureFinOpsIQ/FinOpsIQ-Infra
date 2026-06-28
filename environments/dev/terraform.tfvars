@@ -7,17 +7,8 @@ owner                       = "platform"
 helm_namespace              = "finopsiq-dev"
 application_hostname        = "azurefinopsiq.site"
 argocd_hostname             = "argocd.azurefinopsiq.site"
-internal_api_identifier_uri = "api://azure-cost-advisor-services"
-create_entra_applications   = false
-
-# Microsoft Entra App Registrations used when create_entra_applications is false.
-azure_cost_advisor_dev_login_client_id                        = "06cb757a-4c5c-4d12-8341-e5a45d3871f0"
-azure_cost_advisor_dev_collection_client_id                   = "b195fb5e-a399-4db4-bd6b-3e7fd830a0b6"
-azure_cost_advisor_dev_collection_application_object_id       = "8d132ac2-57aa-42aa-af69-3c52675dfce4"
-azure_cost_advisor_dev_collection_application_resource_id     = ""
-azure_cost_advisor_dev_collection_service_principal_object_id = "592e7835-485d-46f2-beee-0712d5e6cbcb"
-manage_azure_cost_advisor_dev_collection_federated_credential = true
-platform_admin_object_id                                      = ""
+internal_api_identifier_uri = "api://finopsiq-internal-api"
+platform_admin_object_id    = ""
 
 extra_tags = {
   Project    = "FinsOpsIQ"

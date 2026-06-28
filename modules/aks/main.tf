@@ -29,6 +29,10 @@ resource "azurerm_kubernetes_cluster" "this" {
     host_encryption_enabled      = true
     only_critical_addons_enabled = true
     temporary_name_for_rotation  = var.system_node_pool.temporary_name_for_rotation
+
+    upgrade_settings {
+      max_surge = "10%"
+    }
   }
 
   identity {
@@ -96,4 +100,8 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   os_disk_size_gb         = each.value.os_disk_size_gb
   host_encryption_enabled = true
   tags                    = var.tags
+
+  upgrade_settings {
+    max_surge = "10%"
+  }
 }
