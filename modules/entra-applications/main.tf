@@ -4,8 +4,8 @@ resource "azuread_application" "login" {
 
   web {
     redirect_uris = [
-      "https://${var.application_hostname}/auth/callback",
-      "http://${var.application_hostname}/auth/callback",
+      "https://${var.application_hostname}/api/auth/callback",
+      "http://localhost:3000/api/auth/callback",
     ]
 
     implicit_grant {
