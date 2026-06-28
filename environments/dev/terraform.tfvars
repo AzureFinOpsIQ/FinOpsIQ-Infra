@@ -14,8 +14,8 @@ create_entra_applications   = false
 # collection: azure-cost-advisor-dev-collection
 existing_entra_login_client_id                        = "06cb757a-4c5c-4d12-8341-e5a45d3871f0"
 existing_collection_entra_client_id                   = "b195fb5e-a399-4db4-bd6b-3e7fd830a0b6"
-existing_collection_entra_application_object_id       = ""
-existing_collection_entra_service_principal_object_id = ""
+existing_collection_entra_application_object_id       = "8d132ac2-57aa-42aa-af69-3c52675dfce4"
+existing_collection_entra_service_principal_object_id = "592e7835-485d-46f2-beee-0712d5e6cbcb"
 manage_existing_collection_entra_federated_credential = true
 platform_admin_object_id                              = ""
 
