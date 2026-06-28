@@ -394,21 +394,15 @@ module "entra_applications" {
   depends_on = [module.aks]
 }
 
-data "azuread_application" "existing_collection" {
+resource "azuread_application_federated_identity_credential" "existing_collection" {
+  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
   count = (
     !var.create_entra_applications
     && var.manage_existing_collection_entra_federated_credential
-    && var.existing_collection_entra_client_id != ""
+    && var.existing_collection_entra_application_object_id != ""
   ) ? 1 : 0
 
-  client_id = var.existing_collection_entra_client_id
-}
-
-resource "azuread_application_federated_identity_credential" "existing_collection" {
-  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
-  count = length(data.azuread_application.existing_collection)
-
-  application_id = data.azuread_application.existing_collection[0].id
+  application_id = var.existing_collection_entra_application_object_id
   display_name   = "${var.environment}-collection-workload-identity"
   audiences      = ["api://AzureADTokenExchange"]
   issuer         = module.aks.oidc_issuer_url
@@ -472,6 +466,23 @@ module "role_assignments" {
         scope                = module.aks.id
         role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
         principal_id         = var.platform_admin_object_id
+      }
+    },
+    var.existing_collection_entra_service_principal_object_id == "" ? {} : {
+      collection_app_subscription_reader = {
+        scope                = "/subscriptions/${var.subscription_id}"
+        role_definition_name = "Reader"
+        principal_id         = var.existing_collection_entra_service_principal_object_id
+      }
+      collection_app_cost_management_reader = {
+        scope                = "/subscriptions/${var.subscription_id}"
+        role_definition_name = "Cost Management Reader"
+        principal_id         = var.existing_collection_entra_service_principal_object_id
+      }
+      collection_app_monitoring_reader = {
+        scope                = "/subscriptions/${var.subscription_id}"
+        role_definition_name = "Monitoring Reader"
+        principal_id         = var.existing_collection_entra_service_principal_object_id
       }
     },
     {

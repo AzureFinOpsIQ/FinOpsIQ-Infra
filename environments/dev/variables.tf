@@ -77,6 +77,18 @@ variable "existing_collection_entra_client_id" {
   default     = ""
 }
 
+variable "existing_collection_entra_application_object_id" {
+  description = "Object ID of the existing Microsoft Entra collection application registration. Required to create its federated identity credential without listing applications."
+  type        = string
+  default     = ""
+}
+
+variable "existing_collection_entra_service_principal_object_id" {
+  description = "Object ID of the existing Microsoft Entra collection service principal. Optional; when set, Terraform assigns subscription reader roles for live collection."
+  type        = string
+  default     = ""
+}
+
 variable "manage_existing_collection_entra_federated_credential" {
   description = "Create the AKS Workload Identity federated credential on the existing collection app registration when create_entra_applications is false."
   type        = bool
