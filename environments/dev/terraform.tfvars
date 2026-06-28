@@ -10,9 +10,10 @@ argocd_hostname             = "argocd.azurefinopsiq.site"
 internal_api_identifier_uri = "api://azure-cost-advisor-services"
 create_entra_applications   = false
 
-# Existing Entra app registration client IDs used when create_entra_applications is false.
-existing_entra_login_client_id      = ""
-existing_collection_entra_client_id = ""
+# Existing Entra app registrations used when create_entra_applications is false.
+# collection: azure-cost-advisor-dev-collection
+existing_entra_login_client_id      = "06cb757a-4c5c-4d12-8341-e5a45d3871f0"
+existing_collection_entra_client_id = "b195fb5e-a399-4db4-bd6b-3e7fd830a0b6"
 platform_admin_object_id            = ""
 
 extra_tags = {

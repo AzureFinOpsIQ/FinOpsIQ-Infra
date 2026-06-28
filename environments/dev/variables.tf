@@ -77,6 +77,12 @@ variable "existing_collection_entra_client_id" {
   default     = ""
 }
 
+variable "manage_existing_collection_entra_federated_credential" {
+  description = "Create the AKS Workload Identity federated credential on the existing collection app registration when create_entra_applications is false."
+  type        = bool
+  default     = true
+}
+
 variable "workload_service_accounts" {
   description = "Workload Identity service accounts keyed by managed identity key."
   type        = map(string)

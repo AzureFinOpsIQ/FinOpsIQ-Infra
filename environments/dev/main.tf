@@ -394,6 +394,29 @@ module "entra_applications" {
   depends_on = [module.aks]
 }
 
+data "azuread_application" "existing_collection" {
+  count = (
+    !var.create_entra_applications
+    && var.manage_existing_collection_entra_federated_credential
+    && var.existing_collection_entra_client_id != ""
+  ) ? 1 : 0
+
+  client_id = var.existing_collection_entra_client_id
+}
+
+resource "azuread_application_federated_identity_credential" "existing_collection" {
+  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
+  count = length(data.azuread_application.existing_collection)
+
+  application_id = data.azuread_application.existing_collection[0].id
+  display_name   = "${var.environment}-collection-workload-identity"
+  audiences      = ["api://AzureADTokenExchange"]
+  issuer         = module.aks.oidc_issuer_url
+  subject        = local.workload_identity_subjects["collection"]
+
+  depends_on = [module.aks]
+}
+
 module "role_assignments" {
   source = "../../modules/role-assignments"
   role_assignments = merge(
