@@ -181,6 +181,24 @@ The root environments expose `helm_values`, including:
 
 The output is marked sensitive because it includes runtime configuration values.
 
+## Microsoft Entra App Registration Inputs
+
+When `create_entra_applications = false`, Terraform uses the existing Microsoft Entra App Registrations listed below. To avoid Microsoft Graph read permissions during deployment, do not use `data.azuread_application` or `data.azuread_service_principal` lookups. Supply the required IDs through `terraform.tfvars`, GitHub Actions variables mapped to `TF_VAR_*`, or another approved variable source.
+
+Required application configuration:
+
+- `azure-cost-advisor-dev-login`: supply the Application (client) ID in `azure_cost_advisor_dev_login_client_id`. Its client secret is stored in Key Vault as `ENTRA-CLIENT-SECRET`.
+- `azure-cost-advisor-dev-internal-api`: supply the API audience/Application ID URI in `internal_api_identifier_uri`.
+- `azure-cost-advisor-dev-collection`: supply the Application (client) ID in `azure_cost_advisor_dev_collection_client_id`.
+
+Required only for Terraform-managed collection Workload Identity and collection app RBAC:
+
+- `azure_cost_advisor_dev_collection_application_object_id`: App Registration object ID for `azure-cost-advisor-dev-collection`; Terraform formats it as `/applications/<object-id>`.
+- `azure_cost_advisor_dev_collection_application_resource_id`: optional AzureAD provider resource ID, `/applications/<object-id>`. Use this instead of the object ID if you already store the provider resource ID.
+- `azure_cost_advisor_dev_collection_service_principal_object_id`: Enterprise Application/service principal object ID for `azure-cost-advisor-dev-collection`; used for subscription Reader, Cost Management Reader, and Monitoring Reader assignments.
+
+The CI/CD identity still needs permission to update the `azure-cost-advisor-dev-collection` App Registration when `manage_azure_cost_advisor_dev_collection_federated_credential = true`. Least privilege is ownership of that app registration plus Microsoft Graph application write permission for owned applications, or an Entra role such as Application Administrator/Cloud Application Administrator. Directory-wide Graph read permissions such as Directory.Read.All or Application.Read.All are not required by this Terraform root module.
+
 ## Production Readiness Review
 
 Implemented:

@@ -51,6 +51,13 @@ locals {
   bastion_subnet_id             = try(module.network.subnet_ids[var.bastion.subnet_key], "")
   management_subnet_id          = try(module.network.subnet_ids[var.management_vm.subnet_key], "")
   application_gateway_subnet_id = try(module.network.subnet_ids[var.application_gateway.subnet_key], "")
+  azure_cost_advisor_dev_collection_application_id = (
+    var.azure_cost_advisor_dev_collection_application_resource_id != ""
+    ? var.azure_cost_advisor_dev_collection_application_resource_id
+    : var.azure_cost_advisor_dev_collection_application_object_id != ""
+    ? "/applications/${var.azure_cost_advisor_dev_collection_application_object_id}"
+    : ""
+  )
 }
 
 resource "random_password" "management_vm_admin" {
@@ -394,34 +401,25 @@ module "entra_applications" {
   depends_on = [module.aks]
 }
 
-data "azuread_application" "azure_cost_advisor_dev_collection" {
+resource "azuread_application_federated_identity_credential" "azure_cost_advisor_dev_collection" {
+  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
   count = (
     !var.create_entra_applications
     && var.manage_azure_cost_advisor_dev_collection_federated_credential
-    && var.azure_cost_advisor_dev_collection_client_id != ""
   ) ? 1 : 0
 
-  client_id = var.azure_cost_advisor_dev_collection_client_id
-}
-
-data "azuread_service_principal" "azure_cost_advisor_dev_collection" {
-  count = (
-    !var.create_entra_applications
-    && var.azure_cost_advisor_dev_collection_client_id != ""
-  ) ? 1 : 0
-
-  client_id = var.azure_cost_advisor_dev_collection_client_id
-}
-
-resource "azuread_application_federated_identity_credential" "azure_cost_advisor_dev_collection" {
-  #checkov:skip=CKV_AZURE_249:This federated credential is for AKS Workload Identity using a system:serviceaccount subject, not GitHub Actions OIDC.
-  count = length(data.azuread_application.azure_cost_advisor_dev_collection)
-
-  application_id = data.azuread_application.azure_cost_advisor_dev_collection[0].id
+  application_id = local.azure_cost_advisor_dev_collection_application_id
   display_name   = "${var.environment}-collection-workload-identity"
   audiences      = ["api://AzureADTokenExchange"]
   issuer         = module.aks.oidc_issuer_url
   subject        = local.workload_identity_subjects["collection"]
+
+  lifecycle {
+    precondition {
+      condition     = local.azure_cost_advisor_dev_collection_application_id != ""
+      error_message = "Set azure_cost_advisor_dev_collection_application_object_id or azure_cost_advisor_dev_collection_application_resource_id when managing the collection federated credential."
+    }
+  }
 
   depends_on = [module.aks]
 }
@@ -483,21 +481,21 @@ module "role_assignments" {
         principal_id         = var.platform_admin_object_id
       }
     },
-    length(data.azuread_service_principal.azure_cost_advisor_dev_collection) == 0 ? {} : {
+    var.azure_cost_advisor_dev_collection_service_principal_object_id == "" ? {} : {
       collection_app_subscription_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Reader"
-        principal_id         = data.azuread_service_principal.azure_cost_advisor_dev_collection[0].object_id
+        principal_id         = var.azure_cost_advisor_dev_collection_service_principal_object_id
       }
       collection_app_cost_management_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Cost Management Reader"
-        principal_id         = data.azuread_service_principal.azure_cost_advisor_dev_collection[0].object_id
+        principal_id         = var.azure_cost_advisor_dev_collection_service_principal_object_id
       }
       collection_app_monitoring_reader = {
         scope                = "/subscriptions/${var.subscription_id}"
         role_definition_name = "Monitoring Reader"
-        principal_id         = data.azuread_service_principal.azure_cost_advisor_dev_collection[0].object_id
+        principal_id         = var.azure_cost_advisor_dev_collection_service_principal_object_id
       }
     },
     {
