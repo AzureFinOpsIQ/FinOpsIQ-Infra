@@ -1,98 +1,59 @@
-# FinsOpsIQ Terraform Infrastructure
+# FinOpsIQ Terraform Infrastructure
 
-This Terraform codebase provisions the Azure infrastructure required by FinsOpsIQ.
+This repository contains the Terraform infrastructure code for FinOpsIQ. It provisions the Azure platform used by the FinOpsIQ SaaS application.
 
-No application code or Helm templates are deployed by Terraform.
+Terraform manages Azure infrastructure only. It does not build application containers, deploy Helm charts, or sync Argo CD applications.
 
-## Folder Structure
+## What Terraform Provisions
+
+- Resource groups and common tags.
+- Virtual network, subnets, private DNS, and private endpoints.
+- Private Azure Kubernetes Service cluster.
+- AKS node pools, OIDC issuer, Azure RBAC, Azure Policy, and Workload Identity.
+- Azure Container Registry.
+- Azure Key Vault.
+- User Assigned Managed Identities.
+- Microsoft Entra application registrations used by the platform.
+- Federated Identity Credentials for GitHub OIDC and AKS Workload Identity.
+- Azure Cosmos DB.
+- Azure Storage and Blob container.
+- Azure Service Bus namespace, topic, and subscriptions.
+- Azure OpenAI.
+- Azure AI Search.
+- Azure Monitor, Log Analytics, Application Insights, Azure Monitor Workspace, and Managed Grafana.
+- Azure Bastion and management VM.
+- Azure RBAC role assignments required by platform identities.
+
+## Repository Layout
 
 ```text
 terraform/
-├── modules/
-│   ├── resource-group/
-│   ├── network/
-│   ├── aks/
-│   ├── acr/
-│   ├── keyvault/
-│   ├── cosmosdb/
-│   ├── servicebus/
-│   ├── storage/
-│   ├── monitor/
-│   ├── application-insights/
-│   ├── ai-search/
-│   ├── openai/
-│   ├── managed-identity/
-│   ├── workload-identity/
-│   └── role-assignments/
-└── environments/
-    ├── dev/
-    │   ├── main.tf
-    │   ├── variables.tf
-    │   ├── terraform.tfvars
-    │   └── backend.tf
-    └── prod/
-        ├── main.tf
-        ├── variables.tf
-        ├── terraform.tfvars
-        └── backend.tf
+  bootstrap/                  Terraform backend bootstrap root module
+  environments/
+    dev/                      DEV root module
+    prod/                     PROD root module
+  modules/
+    acr/
+    ai-search/
+    aks/
+    application-gateway/
+    azure-monitor-workspace/
+    bastion/
+    cosmosdb/
+    cosmosdb-sql-role-assignments/
+    entra-applications/
+    keyvault/
+    managed-grafana/
+    management-vm/
+    network/
+    private-dns/
+    private-endpoints/
+    servicebus/
+    storage/
+    workload-identity/
+  scripts/                    Import and helper scripts used by workflows
+  .github/workflows/          Terraform GitHub Actions workflows
 ```
-
-Each module contains:
-
-```text
-main.tf
-variables.tf
-outputs.tf
-```
-
-## Module Dependency Diagram
-
-```text
-resource-group
-  ├── network
-  │     └── aks
-  │           └── workload-identity
-  ├── monitor
-  │     ├── application-insights
-  │     └── aks
-  ├── acr
-  │     └── role-assignments
-  ├── keyvault
-  │     └── role-assignments
-  ├── cosmosdb
-  ├── servicebus
-  │     └── role-assignments
-  ├── storage
-  │     └── role-assignments
-  ├── ai-search
-  │     └── role-assignments
-  ├── openai
-  │     └── role-assignments
-  └── managed-identity
-        ├── aks
-        ├── workload-identity
-        └── role-assignments
-```
-
-## Module Input / Output Matrix
-
-| Module | Key Inputs | Key Outputs |
-|---|---|---|
-| resource-group | name, location, tags | id, name, location, tags |
-| network | vnet name, address space, subnets, tags | vnet id, subnet ids |
-| acr | name, sku, tags | id, name, login server |
-| keyvault | name, tenant, RBAC, purge protection, network access, tags | id, name, vault URI |
-| cosmosdb | account, database, containers, consistency, network/local auth, tags | account id, endpoint, database, containers |
-| servicebus | namespace, topic, sku, capacity, tags | namespace id/name, topic id/name |
-| storage | account, container, replication, network access, tags | account id/name, blob endpoint, container |
-| monitor | workspace name, sku, retention, tags | workspace id/name |
-| application-insights | name, workspace id, app type, tags | id, name, connection string |
-| ai-search | name, sku, replicas, partitions, local auth, tags | id, endpoint, identity principal |
-| openai | name, subdomain, sku, deployments, local auth, tags | id, endpoint, deployment names, identity principal |
-| managed-identity | identity names, tags | identity ids, client ids, principal ids |
-| workload-identity | issuer, subject, identity id, audience | credential ids, subjects |
-| role-assignments | scope, role name, principal id | role assignment ids |
-| aks | version, subnet, identities, pools, RBAC, network, monitor | id, name, OIDC issuer, node resource group |
 
 ## Environment Strategy
 
@@ -100,119 +61,181 @@ Terraform workspaces are not used.
 
 Environment isolation is implemented with separate root modules:
 
-- `terraform/environments/dev`
-- `terraform/environments/prod`
+- `environments/dev`
+- `environments/prod`
 
-The dev and prod tfvars use separate:
+Each environment has its own variables, tfvars, naming convention, network ranges, Kubernetes namespace, and state key.
 
-- resource group names
-- network CIDRs
-- AKS names
-- resource names
-- Kubernetes namespaces
+## Remote State
 
-This prevents resource name collisions between environments.
+The AzureRM backend is configured during `terraform init` using GitHub repository variables:
 
-## Remote State Strategy
-
-Both environments use:
-
-```hcl
-backend "azurerm" {}
+```text
+TF_STATE_RESOURCE_GROUP
+TF_STATE_STORAGE_ACCOUNT
+TF_STATE_CONTAINER
 ```
 
-Use backend configuration during `terraform init`.
-
-Dev example:
-
-```powershell
-terraform -chdir=terraform/environments/dev init `
-  -backend-config="resource_group_name=<state-rg>" `
-  -backend-config="storage_account_name=<state-storage-account>" `
-  -backend-config="container_name=<state-container>" `
-  -backend-config="key=dev/terraform.tfstate" `
-  -backend-config="use_azuread_auth=true"
-```
-
-Prod example:
-
-```powershell
-terraform -chdir=terraform/environments/prod init `
-  -backend-config="resource_group_name=<state-rg>" `
-  -backend-config="storage_account_name=<state-storage-account>" `
-  -backend-config="container_name=<state-container>" `
-  -backend-config="key=prod/terraform.tfstate" `
-  -backend-config="use_azuread_auth=true"
-```
-
-Azure Storage provides state locking through blob leases.
-
-State file naming strategy:
+State keys:
 
 ```text
 dev/terraform.tfstate
 prod/terraform.tfstate
 ```
 
-Concurrent Terraform deployments are prevented by:
+Azure Blob leases provide Terraform state locking. GitHub Actions also uses concurrency controls to prevent overlapping DEV apply/destroy runs.
 
-- Azure Blob lease state locking in the AzureRM backend
-- GitHub Actions pipeline concurrency group `terraform-dev` for the DEV pipeline
+## Main GitHub Actions Workflows
 
-## AKS / Helm Integration Outputs
+| Workflow | File | Trigger | Purpose |
+| --- | --- | --- | --- |
+| Bootstrap Terraform Backend | `.github/workflows/bootstrap-backend.yml` | Manual `workflow_dispatch` | Creates or validates the remote Terraform backend storage resources. |
+| Terraform Infrastructure - DEV | `.github/workflows/terraform-infra.yml` | Pull request or push to `main` when `modules/**` or `environments/**` change | Runs Checkov, Terraform validate, Terraform fmt, plan, approval, apply, and Slack notification for DEV infrastructure. |
+| Terraform Destroy - DEV | `.github/workflows/terraform-destroy.yml` | Manual `workflow_dispatch` | Creates and applies a destroy plan for DEV using `compute-only` or `full` mode. |
 
-The root environments expose `helm_values`, including:
+Detailed workflow documentation is available in [.github/workflows/terraform-infra.md](.github/workflows/terraform-infra.md).
 
-- `namespace`
-- `acr_login_server`
-- `key_vault_name`
-- `cosmos_endpoint`
-- `cosmos_database`
-- `service_bus_namespace`
-- `service_bus_topic`
-- `storage_blob_endpoint`
-- `storage_container`
-- `applicationinsights_connection`
-- `azure_search_endpoint`
-- `azure_openai_endpoint`
-- `azure_openai_deployment_names`
-- `workload_identity_client_ids`
-- `workload_identity_subjects`
+## Terraform Infrastructure Workflow
 
-The output is marked sensitive because it includes runtime configuration values.
+The DEV infrastructure workflow runs in stages:
 
-## Microsoft Entra App Registrations
+```text
+Stage 1: Security and Quality
+  - Checkout
+  - Checkov scan
+  - Terraform init
+  - Terraform validate
 
-The dev root module creates and owns three Microsoft Entra App Registrations for FinOpsIQ:
+Stage 2: Format and Plan
+  - Terraform fmt check
+  - Register required Azure provider features
+  - Terraform init
+  - Remove unmanaged Key Vault secret state entries
+  - Import existing DEV resources when needed
+  - Terraform plan
+  - Generate plan summary
+  - Upload plan artifact
+  - Send Slack plan-ready notification
 
-- `finopsiq-login`: single-tenant web application used for user sign-in. Terraform creates its client secret; store the output value in Key Vault as `ENTRA-CLIENT-SECRET`.
-- `finopsiq-internal-api`: single-tenant internal API audience exposed as `api://finopsiq-internal-api`. Terraform creates an `InternalService.Access` application role and assigns it to the API gateway managed identity.
-- `finopsiq-collection`: multi-tenant collection application used for customer-tenant Azure API access. Terraform creates the AKS Workload Identity federated credential for `system:serviceaccount:finopsiq-dev:collection-service`.
+Stage 3: Apply
+  - Requires GitHub Environment approval
+  - Downloads reviewed plan artifact
+  - Applies the saved Terraform plan
+  - Waits for Azure RBAC propagation
+  - Refreshes AKS credentials
+  - Captures outputs and state list
 
-The root `helm_values` output contains the generated `entra_login_client_id`, `entra_login_client_secret`, `internal_api_audience`, and `collection_entra_client_id` values required by the Helm chart and Key Vault. The old `azure-cost-advisor-dev-*` App Registrations are not required by the dev Terraform deployment.
+Stage 4: Notification
+  - Sends final Slack status summary
+```
 
-The CI/CD identity that runs Terraform must be able to create and update App Registrations, Service Principals, app role assignments, and federated credentials. Use an Entra role such as `Cloud Application Administrator` or `Application Administrator`, and ensure the identity can also perform the Azure RBAC assignments in the subscription.
+## Trigger Rules
 
-## Production Readiness Review
+The DEV infrastructure workflow runs only when these paths change:
 
-Implemented:
+```yaml
+paths:
+  - "modules/**"
+  - "environments/**"
+```
 
-- Modular Terraform structure
-- Environment-specific remote backend stubs
-- Workspace/environment guard
-- Common tag inheritance
-- AKS with OIDC and Workload Identity
-- Configurable system and user node pools
-- Configurable autoscaling
-- Azure CNI
-- Managed identities
-- Federated identity credentials
-- Role assignment module
-- Helm-facing outputs
+This means:
 
-Not performed:
+- Changes to `terraform/modules/**` trigger the workflow.
+- Changes to `terraform/environments/**` trigger the workflow.
+- Changes to top-level documentation such as `terraform/README.md` do not trigger the workflow.
+- Changes to `.github/workflows/**` do not trigger the Terraform infrastructure workflow.
+- A `README.md` added inside `modules/**` or `environments/**` will still trigger the workflow because those folders are watched as a whole.
 
-- `terraform apply`
-- AKS deployment
-- Helm deployment
-- Application code changes
+## Destroy Modes
+
+The destroy workflow is manual only.
+
+`compute-only` mode targets short-lived or expensive resources such as:
+
+- AKS and node pools.
+- Application Gateway.
+- Bastion.
+- Management VM.
+- Public IPs.
+- NAT Gateway.
+- Private endpoints and safe-to-recreate network resources.
+
+`compute-only` preserves long-lived platform resources such as:
+
+- Azure Container Registry.
+- Key Vault.
+- User Assigned Managed Identities.
+- Log Analytics.
+- Terraform backend storage.
+- Resource group when preserved resources remain.
+
+`full` mode destroys everything managed in the state.
+
+## Identity And Permissions
+
+GitHub Actions authenticates to Azure using OIDC. No Azure client secret is required for the Terraform workflows.
+
+Required GitHub secrets:
+
+```text
+AZURE_CLIENT_ID
+AZURE_TENANT_ID
+AZURE_SUBSCRIPTION_ID
+SLACK_WEBHOOK_URL
+```
+
+Required GitHub variables:
+
+```text
+TF_STATE_RESOURCE_GROUP
+TF_STATE_STORAGE_ACCOUNT
+TF_STATE_CONTAINER
+```
+
+The Azure identity used by GitHub Actions must have permission to:
+
+- read and write Terraform-managed Azure resources;
+- create and update Azure RBAC role assignments;
+- access the Terraform state backend;
+- create or update required Microsoft Entra application registrations, service principals, app role assignments, and federated credentials when those resources are enabled.
+
+## AKS And Helm Integration
+
+Terraform outputs Helm-facing configuration through sensitive outputs, including:
+
+- ACR login server.
+- Key Vault name and URI.
+- Cosmos DB endpoint and database name.
+- Storage endpoint and container name.
+- Service Bus namespace and topic.
+- Azure OpenAI endpoint and deployment names.
+- Azure AI Search endpoint.
+- Application Insights connection string.
+- Workload Identity client IDs.
+- Entra application client IDs and audiences.
+
+The Helm repository consumes these values to deploy the FinOpsIQ application into AKS.
+
+## Local Validation
+
+Run validation from an environment root:
+
+```bash
+cd terraform/environments/dev
+terraform fmt -recursive ../..
+terraform init
+terraform validate
+terraform plan
+```
+
+Use the backend configuration values for remote state when running against the shared backend.
+
+## What This Repository Does Not Do
+
+- It does not build Docker images.
+- It does not push images to Azure Container Registry.
+- It does not update Helm image tags.
+- It does not deploy Helm releases.
+- It does not sync Argo CD applications.
+- It does not contain SaaS application source code.
